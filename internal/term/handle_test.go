@@ -178,16 +178,29 @@ func TestHandleScrollbackRoundTrip(t *testing.T) {
 // asserts its channel is eventually closed (dropped) rather than blocking the
 // drain loop.
 func TestHandleSlowSubscriberDropped(t *testing.T) {
-	h := startCmd(t, exec.Command("/bin/sh", "-c",
-		"i=0; while [ $i -lt 400 ]; do echo line$i; i=$((i+1)); sleep 0.002; done"))
+	// An unbounded flood makes the overflow deterministic regardless of host
+	// speed or PTY read coalescing: the drain loop keeps producing chunks
+	// while we deliberately do not read, so the bounded channel must fill and
+	// the next fan-out write must drop us. (The previous timed shell script
+	// was flaky on slow CI runners.)
+	h := startCmd(t, exec.Command("yes", "grove-flood"))
 
 	_, ch, cancel := h.Attach()
 	defer cancel()
 
-	// Do not read for a while so the bounded channel overflows and we are dropped.
-	time.Sleep(400 * time.Millisecond)
+	deadline := time.After(15 * time.Second)
+	for {
+		if len(ch) == cap(ch) {
+			break // buffer saturated while the producer still floods
+		}
+		select {
+		case <-deadline:
+			t.Fatalf("subscriber buffer never filled: len=%d cap=%d", len(ch), cap(ch))
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
 
-	deadline := time.After(3 * time.Second)
+	// Drain what is buffered and expect closure from the overflow drop.
 	for {
 		select {
 		case _, ok := <-ch:
