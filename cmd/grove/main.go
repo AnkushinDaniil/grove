@@ -21,14 +21,21 @@ type command struct {
 
 func main() {
 	commands := []command{
-		{"serve", "run the grove daemon", runServe},
+		{"up", "start the daemon if needed and open the UI (default)", runUp},
+		{"serve", "run the grove daemon in the foreground", runServe},
 		{"open", "open the web UI in a browser", runOpen},
+		{"service", "install/uninstall/status the login service (launchd/systemd)", runService},
 		{"hook", "internal: forward a CLI hook payload to the daemon", runHook},
 		{"version", "print version information", runVersion},
 	}
 	if len(os.Args) < 2 {
-		usage(commands)
-		os.Exit(2)
+		// Bare `grove` is the app-like entry point: bring the daemon up and
+		// open the UI.
+		if err := runUp(nil); err != nil {
+			fmt.Fprintf(os.Stderr, "grove: %v\n", err)
+			os.Exit(1)
+		}
+		return
 	}
 	name := os.Args[1]
 	for _, c := range commands {

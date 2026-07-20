@@ -45,6 +45,21 @@ module); build with the UI from source via `make build-release`.
 
 Upgrade: download the newer archive (Homebrew tap coming).
 
+## Run it like an app
+
+```sh
+grove                    # one command: starts the daemon in the background
+                         # (if needed) and opens the UI
+
+grove service install    # start the daemon at login (launchd on macOS,
+                         # systemd --user on Linux); pairs with the dock icon
+```
+
+**Dock icon**: grove ships as an installable PWA — open the UI once, then
+*Safari: Share → Add to Dock* or *Chrome: Install grove* from the address bar.
+With the login service installed, clicking that icon is the whole story: the
+daemon is already running and the app opens instantly.
+
 ## Architecture at a glance
 
 ```

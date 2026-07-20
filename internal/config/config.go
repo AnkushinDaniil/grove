@@ -19,6 +19,7 @@ type Layout struct {
 	Worktrees  string // task workspaces
 	Profiles   string // per-account CLI config dirs
 	Shared     string // context shared across profiles (skills, agents, ...)
+	Logs       string // daemon log files (background/service runs)
 }
 
 // ResolveLayout computes the layout from $GROVE_HOME or the user home dir.
@@ -46,12 +47,13 @@ func ResolveLayout() (Layout, error) {
 		Worktrees:  filepath.Join(home, "worktrees"),
 		Profiles:   filepath.Join(home, "profiles"),
 		Shared:     filepath.Join(home, "shared"),
+		Logs:       filepath.Join(home, "logs"),
 	}, nil
 }
 
 // Ensure creates the layout directories with owner-only permissions.
 func (l Layout) Ensure() error {
-	for _, dir := range []string{l.Home, l.Scrollback, l.Worktrees, l.Profiles, l.Shared} {
+	for _, dir := range []string{l.Home, l.Scrollback, l.Worktrees, l.Profiles, l.Shared, l.Logs} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return fmt.Errorf("create state dir %s: %w", dir, err)
 		}
