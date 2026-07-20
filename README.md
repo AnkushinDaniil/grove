@@ -33,7 +33,8 @@ memory and the mobile PWA are landing next — see the
 
 ```sh
 # macOS (Apple Silicon); see Releases for darwin/linux × arm64/amd64
-curl -L https://github.com/AnkushinDaniil/grove/releases/latest/download/grove_0.1.0-beta.1_darwin_arm64.tar.gz | tar xz
+# (tag-pinned URL: GitHub's "latest" alias skips prereleases)
+curl -L https://github.com/AnkushinDaniil/grove/releases/download/v0.1.0-beta.1/grove_0.1.0-beta.1_darwin_arm64.tar.gz | tar xz
 ./grove serve   # daemon on http://127.0.0.1:7433
 ./grove open    # opens the web UI with your auth token
 ```
