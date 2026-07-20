@@ -1,0 +1,23 @@
+# Binaries
+/grove
+/bin/
+dist/
+
+# UI
+node_modules/
+ui/dist/
+
+# Test artifacts
+coverage.out
+coverage.html
+*.test
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Local state (never commit runtime state)
+.grove/
+.omc/
