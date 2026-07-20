@@ -188,11 +188,9 @@ func TestHandleSlowSubscriberDropped(t *testing.T) {
 	_, ch, cancel := h.Attach()
 	defer cancel()
 
+	// Wait until the buffer saturates while the producer still floods.
 	deadline := time.After(15 * time.Second)
-	for {
-		if len(ch) == cap(ch) {
-			break // buffer saturated while the producer still floods
-		}
+	for len(ch) != cap(ch) {
 		select {
 		case <-deadline:
 			t.Fatalf("subscriber buffer never filled: len=%d cap=%d", len(ch), cap(ch))
