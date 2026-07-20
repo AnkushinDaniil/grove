@@ -29,21 +29,20 @@ memory and the mobile PWA are landing next — see the
 
 ## Install
 
-```sh
-# Go
-go install github.com/AnkushinDaniil/grove/cmd/grove@latest
-
-# or grab an archive from GitHub Releases (darwin/linux, arm64/amd64)
-```
-
-Then:
+**Recommended — release archive** (includes the embedded web UI):
 
 ```sh
-grove serve   # start the daemon (http://127.0.0.1:7433)
-grove open    # open the web UI with your auth token
+# macOS (Apple Silicon); see Releases for darwin/linux × arm64/amd64
+curl -L https://github.com/AnkushinDaniil/grove/releases/latest/download/grove_0.1.0-beta.1_darwin_arm64.tar.gz | tar xz
+./grove serve   # daemon on http://127.0.0.1:7433
+./grove open    # opens the web UI with your auth token
 ```
 
-Upgrade: rerun `go install …@latest` or download the newer release archive.
+`go install github.com/AnkushinDaniil/grove/cmd/grove@latest` also works but
+produces a **UI-less** daemon (API only — web assets can't ship in the Go
+module); build with the UI from source via `make build-release`.
+
+Upgrade: download the newer archive (Homebrew tap coming).
 
 ## Architecture at a glance
 
