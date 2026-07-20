@@ -1,0 +1,2 @@
+{"type":"system","subtype":"init","session_id":"sess-err1","model":"claude-opus-4-8"}
+{"type":"result","subtype":"error_max_turns","is_error":true,"duration_ms":9000,"result":"","session_id":"sess-err1","total_cost_usd":0.05,"usage":{"input_tokens":500,"output_tokens":10}}

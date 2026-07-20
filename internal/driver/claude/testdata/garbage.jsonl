@@ -1,0 +1,7 @@
+{"type":"system","subtype":"init","session_id":"sess-g1","model":"m"}
+
+not json at all
+{"type":"ping"}
+{"type":"system","subtype":"compact_boundary"}
+{"type":"assistant","message":{"content":[{"type":"thinking","thinking":"pondering"}]}}
+{"type":"user","message":{"content":[{"type":"other_block","foo":"bar"}]}}
