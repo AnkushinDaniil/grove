@@ -1,0 +1,17 @@
+import { createBrowserRouter } from "react-router";
+import { AppShell } from "./components/shell/AppShell";
+import { WelcomeView } from "./components/node/WelcomeView";
+import { NodeView } from "./components/node/NodeView";
+import { InboxView } from "./components/inbox/InboxView";
+
+export const router = createBrowserRouter([
+  {
+    path: "/",
+    element: <AppShell />,
+    children: [
+      { index: true, element: <WelcomeView /> },
+      { path: "n/:id", element: <NodeView /> },
+      { path: "inbox", element: <InboxView /> },
+    ],
+  },
+]);

@@ -1,0 +1,15 @@
+<!-- Maskable icon: background fills edge-to-edge (survives OS cropping to a
+     circle/squircle), mark kept inside the ~66% center "safe zone" per the
+     maskable-icon spec so nothing important gets clipped. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <rect width="512" height="512" fill="#0A0C10"/>
+  <g transform="translate(256 256) scale(0.62) translate(-256 -256)">
+    <path d="M256 128v256M256 224l-96-64M256 224l96-64M256 320l-80-48M256 320l80-48"
+      stroke="#A3E635" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="256" cy="128" r="32" fill="#A3E635"/>
+    <circle cx="160" cy="160" r="26" fill="#A3E635" fill-opacity="0.85"/>
+    <circle cx="352" cy="160" r="26" fill="#A3E635" fill-opacity="0.85"/>
+    <circle cx="176" cy="272" r="26" fill="#A3E635" fill-opacity="0.65"/>
+    <circle cx="336" cy="272" r="26" fill="#A3E635" fill-opacity="0.65"/>
+  </g>
+</svg>

@@ -173,12 +173,46 @@ enforcement = `--allowedTools "Read,Grep,Glob,Bash(git diff:*),Bash(git log:*),
 Bash(git show:*),Bash(gh pr view:*),Bash(gh pr diff:*)"` + review-only MCP caps →
 `grove_submit_findings` → UI cherry-pick → ONE batch `gh api …/pulls/{n}/reviews`
 with anchored comments (anchors pre-validated against `gh pr diff`; unanchorable →
-body bullets). (d) **Round-trip**: per-PR GraphQL poll (reviewThreads, reviews,
-statusCheckRollup, mergeable; 60 s focused / 300 s background) → grouped
-`review_comments` attention → "Draft replies" spawns a reply node → user approves
-each → GraphQL `addPullRequestReviewThreadReply` (+ resolve). Per-thread "Fix it"
-spawns a worker on the same worktree. (e) **Checks**: rollup badge; fail →
+body bullets). (d) **Round-trip**: every PR attached to a node is watched — a node may carry
+SEVERAL PRs (multi-repo tasks open one per repo; all listed in `node.meta.prs`,
+each polled). Per-PR GraphQL poll (reviewThreads, reviews, statusCheckRollup,
+mergeable; 60 s focused / 300 s background) diffs state and raises attention on the
+owning node for anything that needs the user: new non-self review **comments**
+(grouped `review_comments`), a submitted **review** (`CHANGES_REQUESTED` →
+attention with the review body; `APPROVED` → done-flavored info item),
+**re-review requested** on the user, mergeability turning blocked, and PR
+**merged/closed** (info, auto-clears other PR items). "Draft replies" spawns a
+reply node → user approves each → GraphQL `addPullRequestReviewThreadReply`
+(+ resolve). Per-thread "Fix it" spawns a worker on the same worktree — for
+CHANGES_REQUESTED the one-click action is "Address review" (worker briefed with
+the review + threads on the task's existing worktree). (e) **Checks**: rollup badge; fail →
 `checks_failed` attention.
+
+**(f) Review radar — a standing per-repo review queue (dedicated UI tab).** For any
+repo the user enables it on, a daemon watcher polls open PRs (one `gh api graphql`
+search per repo per interval: PRs + my review state + headRefOid + latest review
+commit + unresolved threads + updatedAt + checks) and classifies into buckets:
+
+1. **Needs first review** — open PRs with no review from me (configurable filters:
+   skip drafts, skip my own PRs, author allow/deny list, base branch).
+2. **Re-review** — I reviewed, but commits landed after my last review
+   (headRefOid ≠ my last reviewed commit).
+3. **Awaiting my reply** — unresolved review threads whose last comment is not mine
+   or that mention me.
+4. *(optional toggle)* **My PRs with feedback** — my open PRs with change requests
+   or unresolved threads to address.
+
+State lives in a `pr_radar` table (repo, pr, bucket, head_oid, my_last_review_oid,
+last_seen, snoozed_until); poll diffs produce deduplicated attention items (kind
+`review_pending`) and a badge count on the Reviews tab. Each row offers: **Review in
+grove** (spawns the existing read-only review child node → findings → cherry-pick →
+one batch post — flow (c)), **Draft replies** (flow (d)), **Open on GitHub**,
+**Snooze**. Review sessions are ordinary tree nodes under the project, so their
+progress and attention ride the normal machinery. Poll interval: 120 s default per
+repo, backing off to 600 s when the tab is unfocused; all requests via `gh` (zero
+stored credentials). API draft: `GET /api/v1/reviews` → buckets per repo;
+`POST /api/v1/reviews/{repo}/{pr}/snooze {until}`; `POST /api/v1/reviews/{repo}/{pr}/review`
+(spawn review node).
 
 ## 7. Security
 

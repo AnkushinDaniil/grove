@@ -19,6 +19,9 @@ type SessionStartedPayload struct {
 type TextPayload struct {
 	Text  string `json:"text"`
 	Final bool   `json:"final,omitzero"` // end-of-turn assistant text
+	// Role distinguishes injected user prompts ("user") from agent output;
+	// empty means assistant.
+	Role string `json:"role,omitzero"`
 }
 
 // ToolCallPayload accompanies EventToolCall.

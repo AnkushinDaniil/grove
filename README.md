@@ -22,8 +22,28 @@ Think of it as a very advanced tmux for agent fleets:
 
 ## Status
 
-Early development. Not ready for use yet. See [docs/DESIGN.md](docs/DESIGN.md) for the
-full architecture.
+**Beta.** The single-player core works: tree + sessions + terminals + worktrees +
+web UI. Orchestrator agents, multi-account failover, GitHub round-trip, MemPalace
+memory and the mobile PWA are landing next — see the
+[design](docs/DESIGN.md) and [orchestration spec](docs/ORCHESTRATION.md).
+
+## Install
+
+```sh
+# Go
+go install github.com/AnkushinDaniil/grove/cmd/grove@latest
+
+# or grab an archive from GitHub Releases (darwin/linux, arm64/amd64)
+```
+
+Then:
+
+```sh
+grove serve   # start the daemon (http://127.0.0.1:7433)
+grove open    # open the web UI with your auth token
+```
+
+Upgrade: rerun `go install …@latest` or download the newer release archive.
 
 ## Architecture at a glance
 

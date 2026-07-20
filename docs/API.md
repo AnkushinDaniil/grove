@@ -57,6 +57,20 @@ every non-GET request must also send header `X-Grove-CSRF: 1`. The daemon binds
 | `GET  /auth/me` | — | 204 or 401 |
 | `POST /internal/hook?node=&driver=&event=` | raw hook JSON | 204 (auth: `X-Grove-Hook-Token`) |
 
+Clarifications (rulings on ambiguities):
+- **Every** path in the table above lives under `/api/v1` — including
+  `/api/v1/auth/session`, `/api/v1/auth/me`, `/api/v1/internal/hook`. Separately,
+  the daemon serves a bare `GET /auth` HTML page (browser entry point used by
+  `grove open`) that exchanges the `#t=<token>` fragment via `/api/v1/auth/session`.
+- `POST /nodes/{id}/prompt` **echoes** the injected prompt as a `text` event with
+  `payload.role = "user"` before it reaches the agent, so conversation views read
+  naturally in headless mode (`TextPayload.Role`: empty/absent = assistant).
+- `Node.meta` is a JSON **object** on the wire (`json.RawMessage` over the
+  internally stored string); `PATCH /nodes/{id}` accepts an object, invalid JSON → 400.
+- `attention: "review"` intentionally has no M1 event type — it is
+  forward-declared for the M2 GitHub review round-trip and until then appears only
+  on nodes, never as an inbox event.
+
 Errors: `{"error": "human readable message"}` with 4xx/5xx. Validation failures → 400,
 unknown ids → 404, auth → 401.
 
