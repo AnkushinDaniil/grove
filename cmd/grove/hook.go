@@ -40,6 +40,14 @@ func runHook(args []string) error {
 	if err != nil {
 		return fmt.Errorf("read hook payload: %w", err)
 	}
+	// Codex's legacy notify hook appends the event JSON as a trailing argv
+	// argument instead of stdin; fall back to it when stdin was empty.
+	if len(bytes.TrimSpace(payload)) == 0 && fs.NArg() > 0 {
+		payload = []byte(fs.Arg(0))
+		if len(payload) > hookBodyLimit {
+			payload = payload[:hookBodyLimit]
+		}
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), hookTimeout)
 	defer cancel()

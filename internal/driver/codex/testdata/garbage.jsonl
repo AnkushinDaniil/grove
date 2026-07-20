@@ -1,0 +1,13 @@
+{"type":"thread.started","thread_id":"thread-garbage"}
+
+not json at all
+{"type":"turn.started"}
+{"type":"item.updated","item":{"id":"item_0","type":"command_execution","command":"echo hi","status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_1","type":"reasoning","text":"thinking..."}}
+{"type":"item.completed","item":{"id":"item_2","type":"file_change","changes":[],"status":"completed"}}
+{"type":"item.completed","item":{"id":"item_3","type":"web_search","query":"go generics"}}
+{"type":"item.completed","item":{"id":"item_4","type":"todo_list","items":[]}}
+{"type":"item.completed","item":{"id":"item_5","type":"collab_tool_call"}}
+{"type":"item.completed","item":{"id":"item_6","type":"something_new_and_unknown"}}
+{"type":"item.completed"}
+{"type":"something.unknown"}

@@ -1,0 +1,7 @@
+{"type":"thread.started","thread_id":"thread-synthetic-1"}
+{"type":"item.started","item":{"id":"item_0","type":"command_execution","command":"go test ./...","status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_0","type":"command_execution","command":"go test ./...","aggregated_output":"ok  \tgithub.com/example/pkg\t0.012s\n","exit_code":0,"status":"completed"}}
+{"type":"item.started","item":{"id":"item_1","type":"mcp_tool_call","server":"ctx7","tool":"query-docs","arguments":{"library":"go"},"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_1","type":"mcp_tool_call","server":"ctx7","tool":"query-docs","arguments":{"library":"go"},"result":{"text":"docs..."},"status":"completed"}}
+{"type":"item.completed","item":{"id":"item_2","type":"agent_message","text":"Tests pass."}}
+{"type":"turn.completed","usage":{"input_tokens":500,"cached_input_tokens":100,"output_tokens":30,"reasoning_output_tokens":5}}

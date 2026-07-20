@@ -1,0 +1,6 @@
+{"type":"thread.started","thread_id":"thread-synthetic-2"}
+{"type":"item.started","item":{"id":"item_0","type":"command_execution","command":"rm -rf /","status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_0","type":"command_execution","command":"rm -rf /","aggregated_output":"Operation not permitted\n","exit_code":1,"status":"failed"}}
+{"type":"item.completed","item":{"id":"item_1","type":"error","message":"tool crashed"}}
+{"type":"turn.failed","error":{"message":"command failed: rm -rf /"}}
+{"type":"error","message":"stream disconnected"}
