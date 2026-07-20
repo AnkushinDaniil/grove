@@ -1,6 +1,17 @@
 import { useState } from "react";
 import clsx from "clsx";
-import { AlertCircle, CheckCircle2, ChevronRight, MessageSquare, Play, ShieldQuestion, Square, Wrench, Zap } from "lucide-react";
+import {
+  AlertCircle,
+  CheckCircle2,
+  ChevronRight,
+  CircleUser,
+  MessageSquare,
+  Play,
+  ShieldQuestion,
+  Square,
+  Wrench,
+  Zap,
+} from "lucide-react";
 import type { Event } from "../../../gen/types";
 import { RelativeTime } from "../../common/RelativeTime";
 import { summarizeEvent } from "../../../lib/eventSummary";
@@ -24,7 +35,11 @@ interface EventRowProps {
 
 export function EventRow({ event }: EventRowProps) {
   const [expanded, setExpanded] = useState(false);
-  const Icon = TYPE_ICON[event.type];
+  // Injected user prompts get a distinct icon + accent tint so a headless
+  // conversation reads as "you said / it said" at a glance, without a full
+  // chat-bubble treatment -- everything else keeps the neutral styling.
+  const isUserText = event.type === "text" && event.payload.role === "user";
+  const Icon = isUserText ? CircleUser : TYPE_ICON[event.type];
 
   return (
     <li className="rounded-md">
@@ -37,8 +52,10 @@ export function EventRow({ event }: EventRowProps) {
           size={11}
           className={clsx("mt-1 shrink-0 text-ink-faint transition-transform", expanded && "rotate-90")}
         />
-        <Icon size={13} className="mt-0.5 shrink-0 text-ink-faint" />
-        <span className="min-w-0 flex-1 truncate text-ink-muted">{summarizeEvent(event)}</span>
+        <Icon size={13} className={clsx("mt-0.5 shrink-0", isUserText ? "text-accent" : "text-ink-faint")} />
+        <span className={clsx("min-w-0 flex-1 truncate", isUserText ? "text-ink" : "text-ink-muted")}>
+          {summarizeEvent(event)}
+        </span>
         <span className="shrink-0 rounded border border-border-strong px-1 py-px text-[10px] uppercase tracking-wide text-ink-disabled">
           {event.type}
         </span>
