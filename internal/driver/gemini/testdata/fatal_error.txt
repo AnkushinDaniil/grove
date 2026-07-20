@@ -1,0 +1,12 @@
+# synthetic, derived from packages/core/src/output/json-formatter.ts
+# (google-gemini/gemini-cli, main branch): JsonFormatter.formatError()'s
+# shape — no response, no stats, error only. This is the top-level-exception
+# path (e.g. auth failure before any turn starts), distinct from a per-turn
+# error that still carries stats (see parser_test.go for that combined case).
+{
+  "error": {
+    "type": "AuthenticationError",
+    "message": "Please run `gemini auth login` to authenticate.",
+    "code": 401
+  }
+}

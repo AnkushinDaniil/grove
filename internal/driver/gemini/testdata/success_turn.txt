@@ -1,0 +1,46 @@
+# synthetic, derived from packages/core/src/output/{types,json-formatter}.ts
+# and packages/core/src/telemetry/uiTelemetry.ts (google-gemini/gemini-cli,
+# main branch) plus docs/cli/headless.md — a leading log-style line like this
+# one is exactly what "possibly preceded by log lines" covers.
+Loaded 0 extensions.
+{
+  "response": "Done reading the file.",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 1500
+        },
+        "tokens": {
+          "input": 120,
+          "prompt": 120,
+          "candidates": 45,
+          "total": 165,
+          "cached": 0,
+          "thoughts": 0,
+          "tool": 0
+        },
+        "roles": {}
+      }
+    },
+    "tools": {
+      "totalCalls": 1,
+      "totalSuccess": 1,
+      "totalFail": 0,
+      "totalDurationMs": 200,
+      "totalDecisions": {
+        "accept": 1,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}

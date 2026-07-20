@@ -1,0 +1,9 @@
+{"type":"step_start","timestamp":1721481600000,"sessionID":"ses_g1","part":{"id":"p1","sessionID":"ses_g1","messageID":"m1","type":"step-start"}}
+
+not json at all
+{"type":"unknown_future_event_type","timestamp":1721481600100,"sessionID":"ses_g1"}
+{"type":"reasoning","timestamp":1721481600200,"sessionID":"ses_g1","part":{"id":"p2","sessionID":"ses_g1","messageID":"m1","type":"reasoning","text":"thinking about the approach","time":{"start":1721481600150,"end":1721481600200}}}
+{"type":"tool_use","timestamp":1721481600300,"sessionID":"ses_g1"}
+{"type":"tool_use","timestamp":1721481600400,"sessionID":"ses_g1","part":{"id":"p3","sessionID":"ses_g1","messageID":"m1","type":"tool","tool":"bash"}}
+{"type":"text","timestamp":1721481600500,"sessionID":"ses_g1"}
+{"type":"step_finish","timestamp":1721481600600,"sessionID":"ses_g1"}

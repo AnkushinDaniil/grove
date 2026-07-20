@@ -1,0 +1,3 @@
+{"type":"step_start","timestamp":1721481600000,"sessionID":"ses_err1","part":{"id":"prt_1","sessionID":"ses_err1","messageID":"msg_1","type":"step-start"}}
+{"type":"tool_use","timestamp":1721481601000,"sessionID":"ses_err1","part":{"id":"prt_2","sessionID":"ses_err1","messageID":"msg_1","type":"tool","callID":"call_1","tool":"bash","state":{"status":"error","input":{"command":"rm -rf /"},"error":"Operation not permitted","time":{"start":1721481600100,"end":1721481600300}}}}
+{"type":"error","timestamp":1721481601200,"sessionID":"ses_err1","error":{"name":"APIError","data":{"message":"the model provider returned a 500","statusCode":500,"isRetryable":true}}}

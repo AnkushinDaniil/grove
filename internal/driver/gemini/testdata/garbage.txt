@@ -1,0 +1,6 @@
+# synthetic — pure log/noise output with no complete top-level JSON object:
+# a process that was killed, crashed, or ran without --output-format json.
+Starting Gemini CLI...
+Loading extensions from ~/.gemini/extensions
+{ this looks like the start of an object but it never closes
+Warning: some non-fatal issue occurred

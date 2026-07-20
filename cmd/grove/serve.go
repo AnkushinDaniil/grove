@@ -17,6 +17,8 @@ import (
 	"github.com/AnkushinDaniil/grove/internal/driver"
 	"github.com/AnkushinDaniil/grove/internal/driver/claude"
 	"github.com/AnkushinDaniil/grove/internal/driver/codex"
+	"github.com/AnkushinDaniil/grove/internal/driver/gemini"
+	"github.com/AnkushinDaniil/grove/internal/driver/opencode"
 	"github.com/AnkushinDaniil/grove/internal/gitcli"
 	"github.com/AnkushinDaniil/grove/internal/server"
 	"github.com/AnkushinDaniil/grove/internal/session"
@@ -90,7 +92,7 @@ func buildServer(ctx context.Context, logger *slog.Logger, layout config.Layout,
 		return nil, closeOnErr(st, fmt.Errorf("bootstrap workspace: %w", err))
 	}
 
-	reg, err := driver.NewRegistry(claude.New(), codex.New())
+	reg, err := driver.NewRegistry(claude.New(), codex.New(), gemini.New(), opencode.New())
 	if err != nil {
 		return nil, closeOnErr(st, fmt.Errorf("build driver registry: %w", err))
 	}
