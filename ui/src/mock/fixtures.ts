@@ -32,10 +32,17 @@ function eventId(): EventID {
   return `evt-${eventSeq}`;
 }
 
-function node(partial: Omit<Node, "meta" | "attention_reason"> & { meta?: Record<string, unknown>; attention_reason?: string }): Node {
+function node(
+  partial: Omit<Node, "meta" | "attention_reason" | "work_dir"> & {
+    meta?: Record<string, unknown>;
+    attention_reason?: string;
+    work_dir?: string;
+  },
+): Node {
   return {
     attention_reason: "",
     meta: {},
+    work_dir: "",
     ...partial,
   };
 }
@@ -88,6 +95,7 @@ export function buildFixtureNodes(): Node[] {
       profile_id: "",
       current_session_id: "",
       workspace_dir: "~/code/grove",
+      work_dir: "/Users/daniil/code/grove",
       position: 0,
       created_at: ago(30 * HOUR),
       updated_at: ago(2 * MIN),

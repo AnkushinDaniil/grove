@@ -48,6 +48,7 @@ export async function createMockApiClient(): Promise<ApiClient> {
         profile_id: body.profile_id ?? "",
         current_session_id: "",
         workspace_dir: "",
+        work_dir: body.work_dir ?? "",
         meta: {},
         position: siblingCount,
         created_at: now,
@@ -65,6 +66,7 @@ export async function createMockApiClient(): Promise<ApiClient> {
         brief: body.brief ?? existing.brief,
         driver: body.driver ?? existing.driver,
         profile_id: body.profile_id ?? existing.profile_id,
+        work_dir: body.work_dir ?? existing.work_dir,
         meta: body.meta ?? existing.meta,
         updated_at: nowISO(),
       };

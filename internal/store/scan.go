@@ -107,7 +107,7 @@ func scanNode(row rowScanner) (core.Node, error) {
 	if err := row.Scan(
 		&id, &parentID, &kind, &n.Title, &n.Brief, &status, &attention, &n.AttentionReason,
 		&attentionSince, &n.Driver, &profileID, &currentSessionID, &n.WorkspaceDir,
-		&n.Meta, &n.Position, &createdAt, &updatedAt, &archivedAt,
+		&n.WorkDir, &n.Meta, &n.Position, &createdAt, &updatedAt, &archivedAt,
 	); err != nil {
 		return core.Node{}, fmt.Errorf("scan node row: %w", err)
 	}

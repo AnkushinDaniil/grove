@@ -28,6 +28,7 @@ type NodeDTO struct {
 	ProfileID        string          `json:"profile_id"`
 	CurrentSessionID string          `json:"current_session_id"`
 	WorkspaceDir     string          `json:"workspace_dir"`
+	WorkDir          string          `json:"work_dir"`
 	Meta             json.RawMessage `json:"meta"`
 	Position         int             `json:"position"`
 	CreatedAt        string          `json:"created_at"`
@@ -51,6 +52,7 @@ func NodeToDTO(n core.Node) NodeDTO {
 		ProfileID:        string(n.ProfileID),
 		CurrentSessionID: string(n.CurrentSessionID),
 		WorkspaceDir:     n.WorkspaceDir,
+		WorkDir:          n.WorkDir,
 		Meta:             rawJSONObject(n.Meta),
 		Position:         n.Position,
 		CreatedAt:        rfc3339(n.CreatedAt),

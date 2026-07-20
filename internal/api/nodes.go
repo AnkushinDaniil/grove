@@ -4,7 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/AnkushinDaniil/grove/internal/core"
@@ -37,6 +40,7 @@ type createNodeRequest struct {
 	Brief     string `json:"brief"`
 	Driver    string `json:"driver"`
 	ProfileID string `json:"profile_id"`
+	WorkDir   string `json:"work_dir"`
 }
 
 // handleCreateNode creates a node and, for task nodes, provisions per-repo
@@ -49,6 +53,12 @@ func (h *Handlers) handleCreateNode(w http.ResponseWriter, r *http.Request) {
 		writeErrorStatus(w, h.logger, http.StatusBadRequest, "invalid request body")
 		return
 	}
+	if req.WorkDir != "" {
+		if err := validateWorkDir(req.WorkDir); err != nil {
+			writeErrorStatus(w, h.logger, http.StatusBadRequest, workDirErrMsg(err))
+			return
+		}
+	}
 	node, err := h.tree.CreateNode(r.Context(), tree.CreateSpec{
 		ParentID:  core.NodeID(req.ParentID),
 		Kind:      core.Kind(req.Kind),
@@ -56,6 +66,7 @@ func (h *Handlers) handleCreateNode(w http.ResponseWriter, r *http.Request) {
 		Brief:     req.Brief,
 		Driver:    req.Driver,
 		ProfileID: core.ProfileID(req.ProfileID),
+		WorkDir:   req.WorkDir,
 	})
 	if err != nil {
 		writeError(w, h.logger, err)
@@ -76,6 +87,7 @@ type patchNodeRequest struct {
 	Brief     *string         `json:"brief"`
 	Driver    *string         `json:"driver"`
 	ProfileID *string         `json:"profile_id"`
+	WorkDir   *string         `json:"work_dir"`
 	Meta      json.RawMessage `json:"meta"`
 }
 
@@ -90,6 +102,17 @@ func (h *Handlers) handlePatchNode(w http.ResponseWriter, r *http.Request) {
 	if req.ProfileID != nil {
 		pid := core.ProfileID(*req.ProfileID)
 		patch.ProfileID = &pid
+	}
+	if req.WorkDir != nil {
+		// An explicit empty string clears the override (fall back to inheritance),
+		// so it skips the existence check; a non-empty value must resolve.
+		if *req.WorkDir != "" {
+			if err := validateWorkDir(*req.WorkDir); err != nil {
+				writeErrorStatus(w, h.logger, http.StatusBadRequest, workDirErrMsg(err))
+				return
+			}
+		}
+		patch.WorkDir = req.WorkDir
 	}
 	if len(req.Meta) > 0 {
 		if !isJSONObject(req.Meta) {
@@ -130,4 +153,27 @@ func pathID(r *http.Request) core.NodeID { return core.NodeID(r.PathValue("id"))
 func isJSONObject(raw json.RawMessage) bool {
 	trimmed := bytes.TrimSpace(raw)
 	return len(trimmed) > 0 && trimmed[0] == '{' && json.Valid(trimmed)
+}
+
+// validateWorkDir enforces the API-layer rule for a set (non-empty) work dir: it
+// must be an absolute path to a directory that exists on the daemon host, so a
+// session started there does not fail at spawn time. The returned error's text
+// is the actionable detail surfaced to the client.
+func validateWorkDir(dir string) error {
+	if !filepath.IsAbs(dir) {
+		return fmt.Errorf("path is not absolute: %q", dir)
+	}
+	info, err := os.Stat(dir)
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("not a directory: %q", dir)
+	}
+	return nil
+}
+
+// workDirErrMsg wraps a validateWorkDir failure in the client-facing 400 message.
+func workDirErrMsg(err error) string {
+	return "work_dir must be an existing absolute directory: " + err.Error()
 }

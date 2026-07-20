@@ -281,6 +281,77 @@ func TestPatchNodeInvalidMeta(t *testing.T) {
 	h.decode(resp, http.StatusBadRequest, nil)
 }
 
+func TestCreateNodeWithWorkDir(t *testing.T) {
+	h := newHarness(t, nil)
+	dir := t.TempDir()
+
+	var node NodeDTO
+	h.decode(h.do(http.MethodPost, "/api/v1/nodes", map[string]any{
+		"parent_id": string(h.root.ID),
+		"kind":      "project",
+		"title":     "P",
+		"driver":    "fake",
+		"work_dir":  dir,
+	}), http.StatusCreated, &node)
+
+	if node.WorkDir != dir {
+		t.Errorf("work_dir = %q, want %q", node.WorkDir, dir)
+	}
+}
+
+func TestCreateNodeRejectsBadWorkDir(t *testing.T) {
+	h := newHarness(t, nil)
+
+	// Relative path → 400.
+	h.decode(h.do(http.MethodPost, "/api/v1/nodes", map[string]any{
+		"parent_id": string(h.root.ID), "kind": "project", "title": "P",
+		"work_dir": "relative/dir",
+	}), http.StatusBadRequest, nil)
+
+	// Absolute but nonexistent → 400.
+	h.decode(h.do(http.MethodPost, "/api/v1/nodes", map[string]any{
+		"parent_id": string(h.root.ID), "kind": "project", "title": "P",
+		"work_dir": filepath.Join(t.TempDir(), "does-not-exist"),
+	}), http.StatusBadRequest, nil)
+}
+
+func TestPatchNodeWorkDirSetAndClear(t *testing.T) {
+	h := newHarness(t, nil)
+	project := h.createNode(h.root.ID, core.KindProject, "Proj", "fake")
+	dir := t.TempDir()
+
+	var patched NodeDTO
+	h.decode(h.do(http.MethodPatch, "/api/v1/nodes/"+project.ID, map[string]any{
+		"work_dir": dir,
+	}), http.StatusOK, &patched)
+	if patched.WorkDir != dir {
+		t.Errorf("after set, work_dir = %q, want %q", patched.WorkDir, dir)
+	}
+
+	// An explicit empty string clears the override without an existence check.
+	h.decode(h.do(http.MethodPatch, "/api/v1/nodes/"+project.ID, map[string]any{
+		"work_dir": "",
+	}), http.StatusOK, &patched)
+	if patched.WorkDir != "" {
+		t.Errorf("after clear, work_dir = %q, want empty", patched.WorkDir)
+	}
+}
+
+func TestPatchNodeRejectsBadWorkDir(t *testing.T) {
+	h := newHarness(t, nil)
+	project := h.createNode(h.root.ID, core.KindProject, "Proj", "fake")
+
+	// Relative path → 400.
+	h.decode(h.do(http.MethodPatch, "/api/v1/nodes/"+project.ID, map[string]any{
+		"work_dir": "relative/dir",
+	}), http.StatusBadRequest, nil)
+
+	// Absolute but nonexistent → 400.
+	h.decode(h.do(http.MethodPatch, "/api/v1/nodes/"+project.ID, map[string]any{
+		"work_dir": filepath.Join(t.TempDir(), "nope"),
+	}), http.StatusBadRequest, nil)
+}
+
 func TestVersionUsageStats(t *testing.T) {
 	h := newHarness(t, nil)
 

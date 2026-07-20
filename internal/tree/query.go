@@ -100,6 +100,31 @@ func (t *Tree) Resolve(id core.NodeID) (Resolved, bool) {
 	}
 }
 
+// ResolveWorkDir returns the effective user-set working directory for a node:
+// its own WorkDir or the nearest non-empty ancestor's. The bool is false only
+// when the node does not exist; when no node in the chain sets a work dir it
+// resolves to ("", true).
+func (t *Tree) ResolveWorkDir(id core.NodeID) (string, bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	n, ok := t.nodes[id]
+	if !ok {
+		return "", false
+	}
+	for {
+		if n.WorkDir != "" {
+			return n.WorkDir, true
+		}
+		if n.ParentID == "" {
+			return "", true
+		}
+		n, ok = t.nodes[n.ParentID]
+		if !ok {
+			return "", true
+		}
+	}
+}
+
 // Rollup aggregates the live descendants of a node (excluding the node
 // itself). Derived on demand; never stored.
 type Rollup struct {

@@ -141,7 +141,7 @@ func (m *Manager) Start(
 	}
 	m.mu.Unlock()
 
-	cwd, err := workingDir(node)
+	cwd, err := m.workingDir(node)
 	if err != nil {
 		return core.Session{}, err
 	}
@@ -352,11 +352,15 @@ func (m *Manager) updateSession(ctx context.Context, ls *liveSession, mutate fun
 	return nil
 }
 
-// workingDir picks the process working directory: the node's workspace dir, or
-// the user's home as a fallback.
-func workingDir(node core.Node) (string, error) {
+// workingDir picks the process working directory, in priority order: the node's
+// machine-managed worktree workspace, the effective user-set working directory
+// inherited down the tree, then the user's home as a fallback.
+func (m *Manager) workingDir(node core.Node) (string, error) {
 	if node.WorkspaceDir != "" {
 		return node.WorkspaceDir, nil
+	}
+	if dir, ok := m.tree.ResolveWorkDir(node.ID); ok && dir != "" {
+		return dir, nil
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {

@@ -10,7 +10,7 @@ import (
 const selectLiveNodesSQL = `
 SELECT id, parent_id, kind, title, brief, status, attention, attention_reason,
 	attention_since, driver, profile_id, current_session_id, workspace_dir,
-	meta, position, created_at, updated_at, archived_at
+	work_dir, meta, position, created_at, updated_at, archived_at
 FROM nodes
 WHERE archived_at IS NULL
 `

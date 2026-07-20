@@ -217,6 +217,43 @@ func TestResolveInheritance(t *testing.T) {
 	}
 }
 
+func TestResolveWorkDir(t *testing.T) {
+	tr, root, _ := newTestTree(t)
+	projDir := "/home/user/project"
+	if _, err := tr.UpdateNode(t.Context(), root.ID, Patch{WorkDir: &projDir}); err != nil {
+		t.Fatalf("UpdateNode root: %v", err)
+	}
+	p := mustCreate(t, tr, CreateSpec{ParentID: root.ID, Kind: core.KindProject, Title: "P"})
+	nested := mustCreate(t, tr, CreateSpec{ParentID: p.ID, Kind: core.KindTask, Title: "t"})
+	own := mustCreate(t, tr, CreateSpec{
+		ParentID: p.ID, Kind: core.KindTask, Title: "own", WorkDir: "/home/user/task",
+	})
+
+	// Nested task with no own value inherits the nearest ancestor's (root's).
+	if got, ok := tr.ResolveWorkDir(nested.ID); !ok || got != projDir {
+		t.Errorf("ResolveWorkDir(nested) = (%q, %v), want (%q, true)", got, ok, projDir)
+	}
+	// A node's own value wins over the ancestor's.
+	if got, ok := tr.ResolveWorkDir(own.ID); !ok || got != "/home/user/task" {
+		t.Errorf("ResolveWorkDir(own) = (%q, %v), want (/home/user/task, true)", got, ok)
+	}
+
+	// Unset everywhere resolves to ("", true).
+	tr2, root2, _ := newTestTree(t)
+	task := mustCreate(t, tr2, CreateSpec{
+		ParentID: mustCreate(t, tr2, CreateSpec{ParentID: root2.ID, Kind: core.KindProject, Title: "P"}).ID,
+		Kind:     core.KindTask, Title: "t",
+	})
+	if got, ok := tr2.ResolveWorkDir(task.ID); !ok || got != "" {
+		t.Errorf("ResolveWorkDir(unset) = (%q, %v), want (\"\", true)", got, ok)
+	}
+
+	// A missing node reports ok=false.
+	if got, ok := tr2.ResolveWorkDir("does-not-exist"); ok || got != "" {
+		t.Errorf("ResolveWorkDir(missing) = (%q, %v), want (\"\", false)", got, ok)
+	}
+}
+
 func TestStoreFailureIsAtomic(t *testing.T) {
 	tr, root, fs := newTestTree(t)
 	before := tr.Snapshot()

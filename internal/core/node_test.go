@@ -108,6 +108,8 @@ func TestNodeValidate(t *testing.T) {
 			n.Attention = AttentionError
 			n.AttentionSince = time.Now()
 		}, false},
+		{"relative work dir", func(n *Node) { n.WorkDir = "relative/work/dir" }, true},
+		{"absolute work dir", func(n *Node) { n.WorkDir = "/abs/work/dir" }, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

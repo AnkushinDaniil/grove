@@ -51,12 +51,17 @@ func TestOpenTwiceIsIdempotent(t *testing.T) {
 		}
 	}()
 
+	migrations, err := loadMigrations()
+	if err != nil {
+		t.Fatalf("loadMigrations: %v", err)
+	}
 	var count int
 	if err := s2.db.QueryRowContext(t.Context(), "SELECT COUNT(*) FROM schema_migrations").Scan(&count); err != nil {
 		t.Fatalf("query schema_migrations: %v", err)
 	}
-	if count != 1 {
-		t.Errorf("schema_migrations row count after reopen = %d, want 1 (no duplicate migration applied)", count)
+	if count != len(migrations) {
+		t.Errorf("schema_migrations row count after reopen = %d, want %d (each migration applied exactly once)",
+			count, len(migrations))
 	}
 
 	// The reopened store must still be fully usable.

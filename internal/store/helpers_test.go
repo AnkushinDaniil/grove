@@ -66,6 +66,7 @@ func testNode(id, parentID core.NodeID) core.Node {
 		ProfileID:        core.ProfileID("profile-1"),
 		CurrentSessionID: "",
 		WorkspaceDir:     "/tmp/ws",
+		WorkDir:          "/tmp/work",
 		Meta:             "{}",
 		Position:         0,
 		CreatedAt:        msTime(1_700_000_000_000),
@@ -87,7 +88,7 @@ func loadNodeDirect(t *testing.T, s *Store, id core.NodeID) core.Node {
 	row := s.db.QueryRowContext(t.Context(), `
 		SELECT id, parent_id, kind, title, brief, status, attention, attention_reason,
 			attention_since, driver, profile_id, current_session_id, workspace_dir,
-			meta, position, created_at, updated_at, archived_at
+			work_dir, meta, position, created_at, updated_at, archived_at
 		FROM nodes WHERE id = ?`, string(id))
 	n, err := scanNode(row)
 	if err != nil {

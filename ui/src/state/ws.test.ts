@@ -40,6 +40,7 @@ function makeNode(id: string, overrides: Partial<Node> = {}): Node {
     profile_id: "",
     current_session_id: "",
     workspace_dir: "",
+    work_dir: "",
     meta: {},
     position: 0,
     created_at: "2026-01-01T00:00:00Z",

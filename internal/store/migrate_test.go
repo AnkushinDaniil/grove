@@ -1,6 +1,13 @@
 package store
 
-import "testing"
+import (
+	"database/sql"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"github.com/AnkushinDaniil/grove/internal/core"
+)
 
 func TestParseMigrationFilename(t *testing.T) {
 	tests := []struct {
@@ -49,5 +56,93 @@ func TestLoadMigrationsSortedByVersion(t *testing.T) {
 	}
 	if migrations[0].version != 1 {
 		t.Errorf("first migration version = %d, want 1", migrations[0].version)
+	}
+}
+
+// TestMigrateWorkDirFromZero opens a fresh database (no migrations applied) and
+// verifies 0002 lands, giving nodes an inheritable work_dir column that
+// round-trips.
+func TestMigrateWorkDirFromZero(t *testing.T) {
+	s := newTestStore(t)
+
+	assertMigrationApplied(t, s, 2)
+
+	n := testNode(core.NewNodeID(), "")
+	n.WorkDir = "/abs/work/from/zero"
+	mustSaveNode(t, s, n)
+	if got := loadNodeDirect(t, s, n.ID); got.WorkDir != n.WorkDir {
+		t.Errorf("WorkDir = %q, want %q", got.WorkDir, n.WorkDir)
+	}
+}
+
+// TestMigrateWorkDirFromExisting0001DB simulates a database created before 0002
+// existed (only 0001 applied) and verifies opening it through the store applies
+// the pending 0002 migration without disturbing the 0001 data.
+func TestMigrateWorkDirFromExisting0001DB(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "grove.db")
+	seedDBAtMigration1(t, path)
+
+	s, err := Open(t.Context(), path)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := s.Close(); err != nil {
+			t.Errorf("Close: %v", err)
+		}
+	})
+
+	assertMigrationApplied(t, s, 2)
+
+	n := testNode(core.NewNodeID(), "")
+	n.WorkDir = "/abs/work/upgraded"
+	mustSaveNode(t, s, n)
+	if got := loadNodeDirect(t, s, n.ID); got.WorkDir != n.WorkDir {
+		t.Errorf("WorkDir = %q, want %q", got.WorkDir, n.WorkDir)
+	}
+}
+
+// seedDBAtMigration1 builds a database at path with only migration 0001 applied
+// and recorded, reproducing the on-disk state of a store that predates 0002.
+func seedDBAtMigration1(t *testing.T, path string) {
+	t.Helper()
+	db, err := sql.Open("sqlite", path) // driver registered by store.go's blank import
+	if err != nil {
+		t.Fatalf("open raw db: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	migrations, err := loadMigrations()
+	if err != nil {
+		t.Fatalf("loadMigrations: %v", err)
+	}
+	first := migrations[0]
+	if first.version != 1 {
+		t.Fatalf("first migration version = %d, want 1", first.version)
+	}
+	if _, err := db.ExecContext(t.Context(), createMigrationsTableSQL); err != nil {
+		t.Fatalf("create schema_migrations table: %v", err)
+	}
+	if _, err := db.ExecContext(t.Context(), first.sql); err != nil {
+		t.Fatalf("apply migration 0001: %v", err)
+	}
+	if _, err := db.ExecContext(t.Context(),
+		"INSERT INTO schema_migrations (version, applied_at) VALUES (1, ?)", time.Now().UnixMilli(),
+	); err != nil {
+		t.Fatalf("record migration version 1: %v", err)
+	}
+}
+
+// assertMigrationApplied fails unless exactly one schema_migrations row records
+// the given version.
+func assertMigrationApplied(t *testing.T, s *Store, version int64) {
+	t.Helper()
+	var count int
+	if err := s.db.QueryRowContext(t.Context(),
+		"SELECT COUNT(*) FROM schema_migrations WHERE version = ?", version).Scan(&count); err != nil {
+		t.Fatalf("query schema_migrations: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("schema_migrations version %d count = %d, want 1", version, count)
 	}
 }

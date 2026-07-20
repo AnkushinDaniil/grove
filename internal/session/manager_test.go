@@ -284,6 +284,40 @@ func TestHeadlessPrompt(t *testing.T) {
 	waitNodeStatus(t, tr, node, core.StatusDone)
 }
 
+// TestWorkingDirInheritsUserSetWorkDir sets a user work dir on the project and
+// starts a session on that project (which has no machine-managed WorkspaceDir),
+// so the session must launch in the inherited work dir.
+func TestWorkingDirInheritsUserSetWorkDir(t *testing.T) {
+	m, tr, node := newFixture(t, Config{}, []fakeagent.Step{
+		{WaitStdinLine: true},
+		{ExitCode: new(0)},
+	})
+	// The task fixture carries a WorkspaceDir that always wins; use its project
+	// ancestor (no WorkspaceDir) to exercise the inherited user work-dir path.
+	task, ok := tr.Get(node)
+	if !ok {
+		t.Fatal("task node not found")
+	}
+	project := task.ParentID
+
+	workDir := t.TempDir()
+	if _, err := tr.UpdateNode(t.Context(), project, tree.Patch{WorkDir: &workDir}); err != nil {
+		t.Fatalf("UpdateNode: %v", err)
+	}
+
+	sess, err := m.Start(t.Context(), project, core.ModeHeadless, "", "")
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	if sess.CWD != workDir {
+		t.Errorf("started session CWD = %q, want inherited work dir %q", sess.CWD, workDir)
+	}
+	got := waitSession(t, tr, project, func(s core.Session) bool { return s.ID == sess.ID })
+	if got.CWD != workDir {
+		t.Errorf("tree session CWD = %q, want %q", got.CWD, workDir)
+	}
+}
+
 func TestBudgetExhausted(t *testing.T) {
 	m, _, node := newFixture(t, Config{MaxRunning: 1}, []fakeagent.Step{
 		{WaitStdinLine: true},

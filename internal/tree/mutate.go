@@ -16,6 +16,7 @@ type CreateSpec struct {
 	Brief     string
 	Driver    string         // empty = inherit
 	ProfileID core.ProfileID // empty = inherit
+	WorkDir   string         // empty = inherit; absolute when set
 }
 
 // Bootstrap returns the root workspace, creating it if the tree is empty.
@@ -71,6 +72,7 @@ func (t *Tree) CreateNode(ctx context.Context, spec CreateSpec) (core.Node, erro
 		Attention: core.AttentionNone,
 		Driver:    spec.Driver,
 		ProfileID: spec.ProfileID,
+		WorkDir:   spec.WorkDir,
 		Meta:      "{}",
 		Position:  len(t.children[spec.ParentID]),
 		CreatedAt: now,
@@ -96,6 +98,7 @@ type Patch struct {
 	Brief     *string
 	Driver    *string
 	ProfileID *core.ProfileID
+	WorkDir   *string
 	Meta      *string
 }
 
@@ -121,6 +124,9 @@ func (t *Tree) UpdateNode(ctx context.Context, id core.NodeID, p Patch) (core.No
 	}
 	if p.ProfileID != nil {
 		node.ProfileID = *p.ProfileID
+	}
+	if p.WorkDir != nil {
+		node.WorkDir = *p.WorkDir
 	}
 	if p.Meta != nil {
 		node.Meta = *p.Meta

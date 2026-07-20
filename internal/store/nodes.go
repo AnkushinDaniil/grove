@@ -12,8 +12,8 @@ const upsertNodeSQL = `
 INSERT INTO nodes (
 	id, parent_id, kind, title, brief, status, attention, attention_reason,
 	attention_since, driver, profile_id, current_session_id, workspace_dir,
-	meta, position, created_at, updated_at, archived_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	work_dir, meta, position, created_at, updated_at, archived_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(id) DO UPDATE SET
 	parent_id = excluded.parent_id,
 	kind = excluded.kind,
@@ -27,6 +27,7 @@ ON CONFLICT(id) DO UPDATE SET
 	profile_id = excluded.profile_id,
 	current_session_id = excluded.current_session_id,
 	workspace_dir = excluded.workspace_dir,
+	work_dir = excluded.work_dir,
 	meta = excluded.meta,
 	position = excluded.position,
 	updated_at = excluded.updated_at,
@@ -53,7 +54,7 @@ func upsertNode(ctx context.Context, tx *sql.Tx, n core.Node) error {
 		string(n.ID), nullStr(string(n.ParentID)), string(n.Kind), n.Title, n.Brief,
 		string(n.Status), string(n.Attention), n.AttentionReason, nullMS(n.AttentionSince),
 		n.Driver, string(n.ProfileID), string(n.CurrentSessionID), n.WorkspaceDir,
-		n.Meta, n.Position, msFromTime(n.CreatedAt), msFromTime(n.UpdatedAt), nullMS(n.ArchivedAt),
+		n.WorkDir, n.Meta, n.Position, msFromTime(n.CreatedAt), msFromTime(n.UpdatedAt), nullMS(n.ArchivedAt),
 	)
 	if err != nil {
 		return fmt.Errorf("upsert node %s: %w", n.ID, err)

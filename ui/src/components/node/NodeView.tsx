@@ -10,6 +10,7 @@ import { Breadcrumb } from "./Breadcrumb";
 import { NodeTitle } from "./NodeTitle";
 import { StatusChip } from "./StatusChip";
 import { DriverProfileChips } from "./DriverProfileChips";
+import { WorkDirChip } from "./WorkDirChip";
 import { ActionsRow } from "./ActionsRow";
 import { StartHeadlessPopover } from "./StartHeadlessPopover";
 import { TerminalTab } from "./tabs/TerminalTab";
@@ -107,6 +108,7 @@ export function NodeView() {
             </span>
           )}
           <DriverProfileChips nodeId={id} />
+          <WorkDirChip nodeId={id} />
           {rollup.total > 0 && (
             <span className="text-2xs text-ink-faint">
               {rollup.total} descendant{rollup.total === 1 ? "" : "s"}

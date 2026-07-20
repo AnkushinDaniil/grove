@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"path/filepath"
 	"time"
 )
 
@@ -106,6 +107,10 @@ type Node struct {
 	// resolution happens in the tree actor, never denormalized.
 	Driver    string
 	ProfileID ProfileID
+	// WorkDir is the user-set working directory; empty = inherit from the
+	// nearest non-empty ancestor. Must be absolute when set. Distinct from
+	// WorkspaceDir, which is the machine-managed worktree workspace.
+	WorkDir string
 
 	CurrentSessionID SessionID
 	WorkspaceDir     string // task workspace dir; empty until a worktree exists
@@ -145,6 +150,9 @@ func (n Node) Validate() error {
 	}
 	if n.Attention != AttentionNone && n.AttentionSince.IsZero() {
 		return fmt.Errorf("%w: attention %q requires attention_since", ErrInvalid, n.Attention)
+	}
+	if n.WorkDir != "" && !filepath.IsAbs(n.WorkDir) {
+		return fmt.Errorf("%w: node work dir %q must be absolute", ErrInvalid, n.WorkDir)
 	}
 	return nil
 }

@@ -68,6 +68,7 @@ export interface Node {
   profile_id: ProfileID; // empty = inherited
   current_session_id: SessionID | "";
   workspace_dir: string;
+  work_dir: string; // user-set working directory; empty = inherited from parent chain
   meta: Record<string, unknown>;
   position: number;
   created_at: string;
@@ -179,6 +180,7 @@ export interface CreateNodeRequest {
   brief?: string;
   driver?: string;
   profile_id?: string;
+  work_dir?: string;
 }
 
 export interface PatchNodeRequest {
@@ -186,6 +188,7 @@ export interface PatchNodeRequest {
   brief?: string;
   driver?: string;
   profile_id?: string;
+  work_dir?: string;
   meta?: Record<string, unknown>;
 }
 

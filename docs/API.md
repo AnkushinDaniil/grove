@@ -18,6 +18,7 @@ every non-GET request must also send header `X-Grove-CSRF: 1`. The daemon binds
   "attention_reason": "…", "attention_since": "2026-07-20T12:00:00Z",
   "driver": "", "profile_id": "",            // empty = inherited
   "current_session_id": "", "workspace_dir": "",
+  "work_dir": "",                            // user-set cwd, empty = inherited
   "meta": {}, "position": 0,
   "created_at": "…", "updated_at": "…", "archived_at": "…"
 }
@@ -42,8 +43,8 @@ every non-GET request must also send header `X-Grove-CSRF: 1`. The daemon binds
 | Method & path | Body | Returns |
 |---|---|---|
 | `GET  /tree` | — | `{rev, nodes: Node[], sessions: Session[]}` |
-| `POST /nodes` | `{parent_id, kind, title, brief?, driver?, profile_id?}` | `Node` (201) |
-| `PATCH /nodes/{id}` | `{title?, brief?, driver?, profile_id?, meta?}` | `Node` |
+| `POST /nodes` | `{parent_id, kind, title, brief?, driver?, profile_id?, work_dir?}` | `Node` (201) |
+| `PATCH /nodes/{id}` | `{title?, brief?, driver?, profile_id?, work_dir?, meta?}` | `Node` |
 | `POST /nodes/{id}/archive` | — | `{archived: [id…]}` |
 | `POST /nodes/{id}/ack` | — | `Node` |
 | `POST /nodes/{id}/sessions` | `{mode, prompt?, resume_id?}` | `Session` (201) |
@@ -67,6 +68,11 @@ Clarifications (rulings on ambiguities):
   naturally in headless mode (`TextPayload.Role`: empty/absent = assistant).
 - `Node.meta` is a JSON **object** on the wire (`json.RawMessage` over the
   internally stored string); `PATCH /nodes/{id}` accepts an object, invalid JSON → 400.
+- `Node.work_dir` is the user-set working directory, **inherited like `driver`/`profile_id`**
+  (nearest non-empty ancestor wins). Sessions start in `workspace_dir` (the machine-managed
+  worktree) if set, else the inherited `work_dir`, else the user's home. On `POST`/`PATCH` a
+  non-empty value must be an existing absolute directory → else 400; `PATCH` with an explicit
+  empty string clears the override (falls back to inheritance).
 - `attention: "review"` intentionally has no M1 event type — it is
   forward-declared for the M2 GitHub review round-trip and until then appears only
   on nodes, never as an inbox event.
