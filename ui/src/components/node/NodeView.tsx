@@ -40,10 +40,12 @@ export function NodeView() {
   const [tab, setTab] = useState<TabId>("terminal");
   const [headlessOpen, setHeadlessOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
     setTab("terminal");
     setHeadlessOpen(false);
+    setActionError(null);
   }, [id]);
 
   if (!id) return null;
@@ -60,33 +62,35 @@ export function NodeView() {
   const session = node.current_session_id ? sessionsById[node.current_session_id] : undefined;
   const activeSession = session && !isSessionTerminal(session.status) ? session : undefined;
 
-  async function startPty() {
+  // Every user action funnels through this wrapper so a failed request is
+  // always surfaced — a silently swallowed rejection reads as a dead button.
+  async function runAction(fn: () => Promise<unknown>) {
     setBusy(true);
+    setActionError(null);
     try {
-      await apiClient.createSession(node!.id, { mode: "pty" });
+      await fn();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
     }
   }
 
+  async function startPty() {
+    await runAction(() => apiClient.createSession(node!.id, { mode: "pty" }));
+  }
+
   async function startHeadless(prompt: string) {
-    setBusy(true);
     try {
-      await apiClient.createSession(node!.id, { mode: "headless", prompt });
+      await runAction(() => apiClient.createSession(node!.id, { mode: "headless", prompt }));
     } finally {
-      setBusy(false);
       setHeadlessOpen(false);
     }
   }
 
   async function stopSession() {
     if (!activeSession) return;
-    setBusy(true);
-    try {
-      await apiClient.stopSession(activeSession.id);
-    } finally {
-      setBusy(false);
-    }
+    await runAction(() => apiClient.stopSession(activeSession.id));
   }
 
   return (
@@ -121,6 +125,19 @@ export function NodeView() {
         />
         {headlessOpen && (
           <StartHeadlessPopover onStart={(prompt) => void startHeadless(prompt)} onCancel={() => setHeadlessOpen(false)} />
+        )}
+        {actionError && (
+          <div className="flex items-center gap-2 rounded-md border border-status-failed/40 bg-status-failed/10 px-2.5 py-1.5 text-xs text-status-failed">
+            <AlertTriangle size={12} className="shrink-0" />
+            <span className="min-w-0 flex-1 break-words">{actionError}</span>
+            <button
+              type="button"
+              onClick={() => setActionError(null)}
+              className="shrink-0 text-2xs text-ink-faint hover:text-ink"
+            >
+              dismiss
+            </button>
+          </div>
         )}
       </div>
 

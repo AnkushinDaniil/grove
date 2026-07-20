@@ -88,8 +88,17 @@ func buildServer(ctx context.Context, logger *slog.Logger, layout config.Layout,
 	if err := tr.Load(nodes, sessions); err != nil {
 		return nil, closeOnErr(st, fmt.Errorf("rebuild tree: %w", err))
 	}
-	if _, err := tr.Bootstrap(ctx, "Workspace"); err != nil {
+	root, err := tr.Bootstrap(ctx, "Workspace")
+	if err != nil {
 		return nil, closeOnErr(st, fmt.Errorf("bootstrap workspace: %w", err))
+	}
+	// Every node inherits its driver down the tree; give the root a default so
+	// a fresh install can start sessions immediately (override per node later).
+	if root.Driver == "" {
+		defaultDriver := claude.New().ID()
+		if _, err := tr.UpdateNode(ctx, root.ID, tree.Patch{Driver: &defaultDriver}); err != nil {
+			return nil, closeOnErr(st, fmt.Errorf("set default workspace driver: %w", err))
+		}
 	}
 
 	reg, err := driver.NewRegistry(claude.New(), codex.New(), gemini.New(), opencode.New())
