@@ -238,6 +238,13 @@ export interface UsageResponse {
   profiles: UsageWindow[];
 }
 
+// GET /fs/dirs?prefix=<text> — terminal-style work_dir completion candidates
+// (absolute directory paths) plus the daemon user's resolved home directory.
+export interface DirSuggestions {
+  dirs: string[];
+  home: string;
+}
+
 export interface AuthSessionRequest {
   token: string;
 }

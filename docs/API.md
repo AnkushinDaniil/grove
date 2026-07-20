@@ -52,6 +52,7 @@ every non-GET request must also send header `X-Grove-CSRF: 1`. The daemon binds
 | `POST /sessions/{id}/stop` | — | 204 |
 | `GET  /nodes/{id}/events?after=<event_id>&limit=<n>` | — | `Event[]` (ascending by id) |
 | `GET  /inbox` | — | `Event[]` (unacked attention, newest first) |
+| `GET  /fs/dirs?prefix=<text>` | — | `{dirs: string[], home}` |
 | `GET  /version` | — | `{version, commit}` |
 | `GET  /usage?window=5h\|week` | — | `{profiles: [UsageWindow]}` |
 | `POST /auth/session` | `{token}` | 204 + cookie |
@@ -76,6 +77,18 @@ Clarifications (rulings on ambiguities):
 - `attention: "review"` intentionally has no M1 event type — it is
   forward-declared for the M2 GitHub review round-trip and until then appears only
   on nodes, never as an inbox event.
+- `GET /fs/dirs?prefix=<text>` powers terminal-style `work_dir` tab-completion.
+  It lists the **directories** (real dirs, and symlinks that resolve to dirs —
+  never files) inside the prefix's parent whose final segment case-insensitively
+  `HasPrefix`-matches; a trailing `/` (or an empty prefix, treated as the home
+  dir) lists the whole directory, and a leading `~`/`~/` expands to the daemon
+  user's home (also returned as `home`). Hidden entries (leading `.`) appear only
+  when the typed segment itself starts with `.`. Results are absolute,
+  case-insensitively sorted, and capped at 50; it never recurses. An
+  unreadable/nonexistent parent returns `{"dirs": [], "home"}` with 200 (nothing
+  to complete is not an error), and a `prefix` containing a NUL byte → 400. Trust
+  model: grove is a single-user loopback daemon exposing the authenticated user's
+  own filesystem back to them, so there is no path-traversal boundary to enforce.
 
 Errors: `{"error": "human readable message"}` with 4xx/5xx. Validation failures → 400,
 unknown ids → 404, auth → 401.

@@ -11,6 +11,7 @@ import type {
 import { world } from "./world";
 import { startMockSessionLifecycle } from "./scenarios";
 import { buildFixtureUsage } from "./fixtures";
+import { suggestDirsMock } from "./fakeFs";
 
 function nowISO(): string {
   return new Date().toISOString();
@@ -175,6 +176,10 @@ export async function createMockApiClient(): Promise<ApiClient> {
 
     async getUsage(window) {
       return { profiles: buildFixtureUsage(window) };
+    },
+
+    async suggestDirs(prefix) {
+      return suggestDirsMock(prefix);
     },
 
     async authSession() {

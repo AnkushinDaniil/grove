@@ -2,6 +2,7 @@ import type {
   ArchiveResponse,
   CreateNodeRequest,
   CreateSessionRequest,
+  DirSuggestions,
   Event,
   Node,
   PatchNodeRequest,
@@ -38,6 +39,9 @@ export interface ApiClient {
   getInbox(): Promise<Event[]>;
   getVersion(): Promise<VersionResponse>;
   getUsage(window: UsageWindowKind): Promise<UsageResponse>;
+  /** Directory completion candidates for a partial work_dir path (terminal
+   *  tab-completion). An empty prefix lists the user's home directory. */
+  suggestDirs(prefix: string): Promise<DirSuggestions>;
   authSession(token: string): Promise<void>;
   /** Resolves true if a valid session cookie is already present. */
   authMe(): Promise<boolean>;
@@ -118,6 +122,8 @@ export const realApiClient: ApiClient = {
   getVersion: () => request("/version"),
 
   getUsage: (window) => request(`/usage${qs({ window })}`),
+
+  suggestDirs: (prefix) => request(`/fs/dirs${qs({ prefix })}`),
 
   authSession: (token) =>
     request("/auth/session", { method: "POST", body: JSON.stringify({ token }) }),

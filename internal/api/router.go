@@ -10,6 +10,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"os"
 
 	"github.com/AnkushinDaniil/grove/internal/session"
 	"github.com/AnkushinDaniil/grove/internal/store"
@@ -47,6 +48,11 @@ type Config struct {
 	// agent runs to phone events home; empty disables hook wiring for launches.
 	DaemonURL   string
 	HookCommand string
+
+	// Home resolves the daemon user's home directory for filesystem completion
+	// (GET /fs/dirs). Injected as a seam so tests are independent of $HOME; nil
+	// defaults to os.UserHomeDir.
+	Home func() (string, error)
 }
 
 // Handlers serves the REST contract over the domain packages.
@@ -63,6 +69,7 @@ type Handlers struct {
 	commit      string
 	daemonURL   string
 	hookCommand string
+	home        func() (string, error)
 }
 
 // New builds Handlers from cfg.
@@ -70,6 +77,10 @@ func New(cfg Config) *Handlers {
 	logger := cfg.Logger
 	if logger == nil {
 		logger = slog.Default()
+	}
+	home := cfg.Home
+	if home == nil {
+		home = os.UserHomeDir
 	}
 	return &Handlers{
 		tree:        cfg.Tree,
@@ -83,6 +94,7 @@ func New(cfg Config) *Handlers {
 		commit:      cfg.Commit,
 		daemonURL:   cfg.DaemonURL,
 		hookCommand: cfg.HookCommand,
+		home:        home,
 	}
 }
 
@@ -101,6 +113,7 @@ func (h *Handlers) Routes() http.Handler {
 	mux.HandleFunc("POST /api/v1/sessions/{id}/stop", h.handleStopSession)
 	mux.HandleFunc("GET /api/v1/nodes/{id}/events", h.handleListEvents)
 	mux.HandleFunc("GET /api/v1/inbox", h.handleInbox)
+	mux.HandleFunc("GET /api/v1/fs/dirs", h.handleFsDirs)
 	mux.HandleFunc("GET /api/v1/version", h.handleVersion)
 	mux.HandleFunc("GET /api/v1/usage", h.handleUsage)
 	mux.HandleFunc("GET /api/v1/stats", h.handleStats)
