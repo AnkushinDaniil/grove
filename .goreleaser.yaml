@@ -1,0 +1,50 @@
+version: 2
+
+project_name: grove
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: grove
+    main: ./cmd/grove
+    binary: grove
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - arm64
+      - amd64
+    ldflags:
+      - -s -w
+      - -X main.version={{ .Version }}
+      - -X main.commit={{ .ShortCommit }}
+
+archives:
+  - formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^chore:"
+      - "^test:"
+
+release:
+  prerelease: auto
+  footer: |
+    ## Install
+
+    ```sh
+    go install github.com/AnkushinDaniil/grove/cmd/grove@{{ .Tag }}
+    ```
+
+    Or download the archive for your platform above.
