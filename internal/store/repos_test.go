@@ -1,0 +1,106 @@
+package store
+
+import (
+	"testing"
+
+	"github.com/AnkushinDaniil/grove/internal/core"
+)
+
+func testRepo(id core.RepoID, projectID core.NodeID, name string) core.Repo {
+	return core.Repo{
+		ID:          id,
+		ProjectID:   projectID,
+		Name:        name,
+		SourcePath:  "/home/user/code/" + name,
+		DefaultBase: "main",
+		CreatedAt:   msTime(1_700_000_000_000),
+	}
+}
+
+func TestRepoCRUD(t *testing.T) {
+	s := newTestStore(t)
+	project := testNode(core.NewNodeID(), "")
+	mustSaveNode(t, s, project)
+
+	r := testRepo(core.NewRepoID(), project.ID, "grove")
+	if err := s.SaveRepo(t.Context(), r); err != nil {
+		t.Fatalf("SaveRepo: %v", err)
+	}
+
+	repos, err := s.ListRepos(t.Context(), project.ID)
+	if err != nil {
+		t.Fatalf("ListRepos: %v", err)
+	}
+	if len(repos) != 1 || repos[0] != r {
+		t.Fatalf("ListRepos = %+v, want [%+v]", repos, r)
+	}
+
+	r.DefaultBase = "develop"
+	if err := s.SaveRepo(t.Context(), r); err != nil {
+		t.Fatalf("SaveRepo (update): %v", err)
+	}
+	repos, err = s.ListRepos(t.Context(), project.ID)
+	if err != nil {
+		t.Fatalf("ListRepos after update: %v", err)
+	}
+	if len(repos) != 1 || repos[0] != r {
+		t.Fatalf("ListRepos after update = %+v, want [%+v]", repos, r)
+	}
+
+	if err := s.DeleteRepo(t.Context(), r.ID); err != nil {
+		t.Fatalf("DeleteRepo: %v", err)
+	}
+	repos, err = s.ListRepos(t.Context(), project.ID)
+	if err != nil {
+		t.Fatalf("ListRepos after delete: %v", err)
+	}
+	if len(repos) != 0 {
+		t.Errorf("ListRepos after delete = %+v, want none", repos)
+	}
+}
+
+func TestDeleteRepoMissingIsNotError(t *testing.T) {
+	s := newTestStore(t)
+	if err := s.DeleteRepo(t.Context(), core.NewRepoID()); err != nil {
+		t.Errorf("DeleteRepo(missing): %v", err)
+	}
+}
+
+func TestRepoUniqueProjectName(t *testing.T) {
+	s := newTestStore(t)
+	project := testNode(core.NewNodeID(), "")
+	mustSaveNode(t, s, project)
+
+	r1 := testRepo(core.NewRepoID(), project.ID, "grove")
+	if err := s.SaveRepo(t.Context(), r1); err != nil {
+		t.Fatalf("SaveRepo r1: %v", err)
+	}
+
+	r2 := testRepo(core.NewRepoID(), project.ID, "grove") // same (project_id, name), different id
+	assertUniqueViolation(t, s.SaveRepo(t.Context(), r2))
+}
+
+func TestListReposScopedToProject(t *testing.T) {
+	s := newTestStore(t)
+	p1 := testNode(core.NewNodeID(), "")
+	p2 := testNode(core.NewNodeID(), "")
+	mustSaveNode(t, s, p1)
+	mustSaveNode(t, s, p2)
+
+	r1 := testRepo(core.NewRepoID(), p1.ID, "repo-a")
+	r2 := testRepo(core.NewRepoID(), p2.ID, "repo-b")
+	if err := s.SaveRepo(t.Context(), r1); err != nil {
+		t.Fatalf("SaveRepo r1: %v", err)
+	}
+	if err := s.SaveRepo(t.Context(), r2); err != nil {
+		t.Fatalf("SaveRepo r2: %v", err)
+	}
+
+	repos, err := s.ListRepos(t.Context(), p1.ID)
+	if err != nil {
+		t.Fatalf("ListRepos(p1): %v", err)
+	}
+	if len(repos) != 1 || repos[0].ID != r1.ID {
+		t.Errorf("ListRepos(p1) = %+v, want only [%+v]", repos, r1)
+	}
+}
