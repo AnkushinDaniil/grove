@@ -174,17 +174,22 @@ func TestStateLagDropClosesSocket(t *testing.T) {
 	var hello wsFrame
 	readFrame(t, ctx, c, &hello)
 
-	// Flood the tree without reading: the subscriber buffer (or the per-frame
-	// write timeout) trips, the server drops the subscription and closes.
-	for i := range 2000 {
+	// Flood the tree without reading. Frames must be FAT so the total volume
+	// (600 × 64KiB ≈ 38MiB) vastly exceeds any kernel/library socket
+	// buffering — otherwise a fast runner can swallow the whole flood without
+	// ever blocking the writer, and neither the subscriber buffer nor the
+	// per-frame write timeout would trip (this exact flake hit CI).
+	fatBrief := strings.Repeat("x", 64<<10)
+	for i := range 600 {
 		if _, err := h.tree.CreateNode(ctx, tree.CreateSpec{
-			ParentID: h.root.ID, Kind: core.KindProject, Title: fmt.Sprintf("P%d", i), Driver: "fake",
+			ParentID: h.root.ID, Kind: core.KindProject, Title: fmt.Sprintf("P%d", i),
+			Brief: fatBrief, Driver: "fake",
 		}); err != nil {
 			t.Fatalf("flood mutate %d: %v", i, err)
 		}
 	}
 
-	readCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	readCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	for {
 		_, _, err := c.Read(readCtx)
