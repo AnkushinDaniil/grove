@@ -8,7 +8,7 @@ func TestNewIDUniqueAndSortable(t *testing.T) {
 	const n = 1000
 	seen := make(map[NodeID]bool, n)
 	var prev NodeID
-	for i := 0; i < n; i++ {
+	for range n {
 		id := NewNodeID()
 		if len(id) != 36 {
 			t.Fatalf("id %q has length %d, want 36", id, len(id))

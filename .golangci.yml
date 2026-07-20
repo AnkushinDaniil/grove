@@ -1,0 +1,65 @@
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  default: none
+  enable:
+    # Correctness
+    - govet
+    - staticcheck
+    - errcheck
+    - ineffassign
+    - unused
+    - errorlint
+    - nilerr
+    - copyloopvar
+    - bodyclose
+    - rowserrcheck
+    - sqlclosecheck
+    - noctx
+    - contextcheck
+    # Security
+    - gosec
+    # Style & maintainability
+    - revive
+    - gocritic
+    - unconvert
+    - unparam
+    - wastedassign
+    - misspell
+    - intrange
+    - prealloc
+    - nolintlint
+    - exhaustive
+  settings:
+    exhaustive:
+      default-signifies-exhaustive: true
+    gocritic:
+      disabled-checks:
+        - ifElseChain
+    revive:
+      rules:
+        - name: package-comments
+          disabled: true
+    gosec:
+      excludes:
+        - G304 # file paths are built from validated internal state
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - gosec
+          - noctx
+          - prealloc
+
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/AnkushinDaniil/grove

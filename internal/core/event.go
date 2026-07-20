@@ -53,6 +53,15 @@ func AttentionFor(t EventType, reason AwaitingReason) Attention {
 	return AttentionNone
 }
 
+// EventInput is a normalized driver event before it is stamped, persisted and
+// broadcast. Drivers produce these; the tree turns them into Events.
+type EventInput struct {
+	Type    EventType
+	Payload string         // JSON, may be empty
+	Reason  AwaitingReason // only for EventAwaitingInput
+	Detail  string         // short human text used as the attention reason
+}
+
 // Event is one append-only record in a node's history. Events with
 // RequiresAttention form the inbox until acknowledged.
 type Event struct {
