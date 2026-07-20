@@ -180,7 +180,7 @@ func (t *Tree) Subscribe() (Snapshot, <-chan Delta, func()) {
 
 // broadcastLocked bumps rev, stamps it on the delta, and fans out. Callers
 // hold t.mu and must have already persisted the change.
-func (t *Tree) broadcastLocked(d Delta) Delta {
+func (t *Tree) broadcastLocked(d Delta) {
 	t.rev++
 	d.Rev = t.rev
 	for id, sub := range t.subs {
@@ -193,5 +193,4 @@ func (t *Tree) broadcastLocked(d Delta) Delta {
 			close(sub.ch)
 		}
 	}
-	return d
 }

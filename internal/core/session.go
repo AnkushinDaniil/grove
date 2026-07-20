@@ -61,8 +61,9 @@ func CanTransition(from, to SessionStatus) bool {
 		return from == SessionRunning || from == SessionAwaitingInput
 	case SessionFailed:
 		return from == SessionStarting || from == SessionRunning || from == SessionAwaitingInput
+	default:
+		return false
 	}
-	return false
 }
 
 // NodeStatusFor maps a session status onto the owning node's status.

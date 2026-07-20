@@ -58,7 +58,7 @@ func runHook(args []string) error {
 		fmt.Fprintf(os.Stderr, "grove hook: delivery failed: %v\n", err)
 		return nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, hookBodyLimit))
 	return nil
 }

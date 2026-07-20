@@ -32,8 +32,9 @@ func CanParent(child, parent Kind) bool {
 		return parent == KindWorkspace
 	case KindTask:
 		return parent == KindProject || parent == KindTask
+	default:
+		return false
 	}
-	return false
 }
 
 // NodeStatus is derived from the node's current session (or absence of one).

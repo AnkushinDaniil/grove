@@ -194,7 +194,44 @@ transcripts never copied into the DB. Threat model: defends against other local
 users, browser-origin attacks, accidental secret leakage; NOT against same-user
 malware (same posture as the CLIs).
 
-## 8. Spikes (gating M2 work)
+## 8. Memory: MemPalace (M3)
+
+MemPalace is **the** memory backend (no parallel grove-native store). Tree-scoped,
+cross-driver memory: one knowledge base shared by claude, codex and gemini workers.
+Mapping: workspace ↔ palace, project node ↔ Wing, task subtree ↔ Rooms; room/entry
+metadata carries grove node IDs so tree scopes (self | subtree | ancestors | project)
+translate into palace filters. Scope enforcement rides the existing subtree-scoped
+node tokens.
+
+**Zero-touch lifecycle (hard requirements):**
+- *Bootstrap from scratch:* daemon startup + `grove doctor` detect the MemPalace
+  installation; if absent, grove installs it automatically (detect install channel —
+  npm/uvx/brew — pin a known-good version, log visibly) and initializes the palace:
+  Wing created on project creation, Rooms lazily per task subtree. A missing palace
+  is never an error the user has to fix by hand.
+- *Auto-update:* daily version check against the pinned channel; update applied on
+  daemon restart with a changelog line in the daemon log; palace data migrations are
+  MemPalace's own, grove just gates on a post-update health probe.
+- *Health & degradation:* doctor probes the MCP server (spawn, list_tools, roundtrip
+  write/read in a scratch room). If MemPalace is down mid-flight, writes spool to
+  `~/.grove/spool/memory.jsonl` and replay on recovery; reads degrade to
+  last-injected briefing digests. One attention item, not silent loss.
+
+**Active use without explicit requests — the daemon is a MemPalace MCP client:**
+1. *Recall injection at spawn/wake:* before composing a briefing, the daemon queries
+   MemPalace (node-scoped: own room + subtree + ancestor wings) and injects a
+   bounded "## Memory" section (top-K relevant entries) — the agent benefits even if
+   it never calls a tool.
+2. *Auto-capture:* on `turn_done`, `grove_complete` and resolved feedback items, the
+   daemon writes distilled entries (progress summaries, decisions, fix outcomes) into
+   the node's room automatically, attributed `source=auto`. On task archive, key room
+   content is distilled one level up (knowledge compacts toward the Wing).
+3. *Curated agent tools:* sessions get a curated proxy subset (memory_write,
+   memory_search, memory_digest → mapped onto MemPalace's native tools) instead of
+   all 34 — no tool-list bloat; briefings mandate "search memory before starting,
+   record learnings at milestones".
+
+## 9. Spikes (gating M2 work)
 
 - **S1** cross-profile `--resume` with shared `projects/` (blocks the multi-account headline; fallback: cold handoff).
 - **S2** keychain behavior with two config dirs under 24 h concurrent soak (fallback: per-profile spawn mutex).

@@ -49,8 +49,9 @@ func AttentionFor(t EventType, reason AwaitingReason) Attention {
 		return AttentionDone
 	case EventError:
 		return AttentionError
+	default:
+		return AttentionNone
 	}
-	return AttentionNone
 }
 
 // EventInput is a normalized driver event before it is stamped, persisted and

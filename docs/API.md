@@ -52,12 +52,77 @@ every non-GET request must also send header `X-Grove-CSRF: 1`. The daemon binds
 | `GET  /nodes/{id}/events?after=<event_id>&limit=<n>` | — | `Event[]` (ascending by id) |
 | `GET  /inbox` | — | `Event[]` (unacked attention, newest first) |
 | `GET  /version` | — | `{version, commit}` |
+| `GET  /usage?window=5h\|week` | — | `{profiles: [UsageWindow]}` |
 | `POST /auth/session` | `{token}` | 204 + cookie |
 | `GET  /auth/me` | — | 204 or 401 |
 | `POST /internal/hook?node=&driver=&event=` | raw hook JSON | 204 (auth: `X-Grove-Hook-Token`) |
 
 Errors: `{"error": "human readable message"}` with 4xx/5xx. Validation failures → 400,
 unknown ids → 404, auth → 401.
+
+```jsonc
+// UsageWindow — one profile's consumption in the requested window.
+// utilization is a 0..1 estimate against the plan's limit (null = unknown);
+// resets_at appears when a rate-limit reset time was detected.
+{
+  "profile_id": "…", "name": "personal", "driver": "claude",
+  "window": "5h", "window_start": "…", "window_end": "…",
+  "input_tokens": 0, "output_tokens": 0, "cache_read_tokens": 0,
+  "cost_usd": 0.0, "utilization": 0.42, "resets_at": "…",
+  "cooldown_until": "…"   // set while the profile is rate-limited
+}
+```
+
+The daemon aggregates usage locally from session transcripts (no network calls);
+until the aggregator lands the endpoint returns `{"profiles": []}`.
+
+### `GET /stats?scope=<node_id>&range=24h|7d|30d` (draft — additive evolution allowed)
+
+Aggregates over the scope subtree (default: whole workspace), all computed from the
+local DB (events / sessions / usage):
+
+```jsonc
+{
+  "range": "7d", "scope": "…",
+  "tokens": {
+    "total": {"input": 0, "output": 0, "cache_read": 0, "cost_usd": 0.0},
+    "by_day":     [{"day": "2026-07-20", "input": 0, "output": 0, "cost_usd": 0.0}],
+    "by_driver":  [{"driver": "claude", "input": 0, "output": 0, "cost_usd": 0.0}],
+    "by_profile": [{"profile_id": "…", "name": "…", "input": 0, "output": 0, "cost_usd": 0.0}],
+    "top_nodes":  [{"node_id": "…", "title": "…", "input": 0, "output": 0, "cost_usd": 0.0}]
+  },
+  "agents": {
+    "sessions_active": 0, "sessions_by_day": [{"day": "…", "started": 0, "done": 0, "failed": 0}],
+    "avg_session_minutes": 0.0, "by_driver": [{"driver": "…", "count": 0}]
+  },
+  "flow": {
+    "tasks_created": 0, "tasks_done": 0, "tasks_failed": 0,
+    "median_task_hours": 0.0,
+    "attention_wait_p50_minutes": 0.0, "attention_wait_p95_minutes": 0.0,
+    "prs_opened": 0, "prs_merged": 0
+  },
+  "tools":  [{"name": "Bash", "calls": 0, "errors": 0}],           // from tool_call/tool_result events
+  "models": [{"model": "claude-sonnet-5", "input": 0, "output": 0, "cost_usd": 0.0}],
+  "skills": [{"skill": "code-review", "invocations": 0}],          // Skill-tool calls parsed from payloads
+  "feedback": [{"kind": "skill", "subject": "code-review", "open": 0, "total": 0}]
+}
+```
+
+## Feedback loop
+
+User-recorded quality signals ("this skill misfired", "wrong approach") that turn
+into fixable work items:
+
+| Method & path | Body | Returns |
+|---|---|---|
+| `POST /feedback` | `{node_id, session_id?, event_id?, kind: skill\|tool\|model\|agent\|other, subject?, comment}` | `Feedback` (201) |
+| `GET  /feedback?status=open\|resolved\|all` | — | `Feedback[]` |
+| `POST /feedback/{id}/resolve` | `{fix_node_id?}` | `Feedback` |
+
+`Feedback = {id, node_id, session_id, event_id, kind, subject, comment, created_at,
+resolved_at, fix_node_id}`. The UI offers "Create fix task" on any open feedback item:
+it spawns a task node briefed with the feedback context (and, for kind=skill, the
+skill name/path), then links it via `fix_node_id` — closing the loop inside the tree.
 
 ## WebSocket `/ws/state` (JSON text frames, server-push)
 

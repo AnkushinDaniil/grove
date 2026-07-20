@@ -62,6 +62,7 @@ type UsagePayload struct {
 	InputTokens  int64   `json:"input_tokens"`
 	OutputTokens int64   `json:"output_tokens"`
 	CostUSD      float64 `json:"cost_usd,omitzero"`
+	Model        string  `json:"model,omitzero"` // per-turn model for by-model analytics
 }
 
 // MarshalPayload encodes a typed payload for EventInput.Payload.

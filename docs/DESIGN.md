@@ -94,6 +94,17 @@ repositories that change together. grove models exactly that:
   allowlist, CSRF header on mutations, daemon binds `127.0.0.1` (remote access =
   Tailscale, same token).
 
+## Remote control from a phone
+
+Sessions live on the computer; the phone is a pure client of the same daemon with the
+full feature set. The UI is an installable PWA with a dedicated mobile layout
+(bottom tabs Tree/Node/Inbox, drill-down tree, actionable inbox cards with
+approve/deny/reply, chat-style prompt composer, terminal with a key accessory bar).
+Transport: `tailscale serve 7433` exposes the daemon over the user's tailnet with
+real HTTPS and zero grove code; the HTTPS origin also unlocks Web Push for attention
+notifications on iOS/Android (installed PWA). Same token auth; the Host/Origin
+allowlist accepts the configured tailnet hostname.
+
 ## Performance economy
 
 The daemon is cheap (idle node = a row + a struct; target <40 MiB RSS at 100 idle
