@@ -72,7 +72,9 @@ Clarifications (rulings on ambiguities):
 - `Node.work_dir` is the user-set working directory, **inherited like `driver`/`profile_id`**
   (nearest non-empty ancestor wins). Sessions start in `workspace_dir` (the machine-managed
   worktree) if set, else the inherited `work_dir`, else the user's home. On `POST`/`PATCH` a
-  non-empty value must be an existing absolute directory → else 400; `PATCH` with an explicit
+  non-empty value is normalized first — `~`, `~/x` and bare relative paths resolve against
+  the daemon user's home (matching `/fs/dirs` completion semantics) — and must then be an
+  existing directory → else 400. The stored value is always absolute; `PATCH` with an explicit
   empty string clears the override (falls back to inheritance).
 - `attention: "review"` intentionally has no M1 event type — it is
   forward-declared for the M2 GitHub review round-trip and until then appears only

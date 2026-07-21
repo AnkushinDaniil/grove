@@ -102,6 +102,14 @@ func splitCompletion(prefix, home string) (parent, base string) {
 		prefix = home
 	case strings.HasPrefix(prefix, "~/"):
 		prefix = home + prefix[1:] // replace "~" with home, keeping the rest (incl. "/")
+	case !filepath.IsAbs(prefix):
+		// Bare relative input is treated as home-relative, matching the
+		// work_dir normalization rules — suggestions always come back absolute.
+		trailing := strings.HasSuffix(prefix, "/")
+		prefix = filepath.Join(home, prefix)
+		if trailing {
+			prefix += "/"
+		}
 	}
 	if strings.HasSuffix(prefix, "/") {
 		return prefix, ""

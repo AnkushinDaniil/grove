@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/AnkushinDaniil/grove/internal/core"
@@ -54,10 +55,12 @@ func (h *Handlers) handleCreateNode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.WorkDir != "" {
-		if err := validateWorkDir(req.WorkDir); err != nil {
+		normalized, err := h.resolveWorkDir(req.WorkDir)
+		if err != nil {
 			writeErrorStatus(w, h.logger, http.StatusBadRequest, workDirErrMsg(err))
 			return
 		}
+		req.WorkDir = normalized
 	}
 	node, err := h.tree.CreateNode(r.Context(), tree.CreateSpec{
 		ParentID:  core.NodeID(req.ParentID),
@@ -107,10 +110,12 @@ func (h *Handlers) handlePatchNode(w http.ResponseWriter, r *http.Request) {
 		// An explicit empty string clears the override (fall back to inheritance),
 		// so it skips the existence check; a non-empty value must resolve.
 		if *req.WorkDir != "" {
-			if err := validateWorkDir(*req.WorkDir); err != nil {
+			normalized, err := h.resolveWorkDir(*req.WorkDir)
+			if err != nil {
 				writeErrorStatus(w, h.logger, http.StatusBadRequest, workDirErrMsg(err))
 				return
 			}
+			req.WorkDir = &normalized
 		}
 		patch.WorkDir = req.WorkDir
 	}
@@ -155,6 +160,41 @@ func isJSONObject(raw json.RawMessage) bool {
 	return len(trimmed) > 0 && trimmed[0] == '{' && json.Valid(trimmed)
 }
 
+// normalizeWorkDir expands the shorthands the completion UI produces into an
+// absolute path: "~" and "~/x" expand against home, a bare relative path is
+// treated as home-relative, and absolute paths are cleaned. Empty stays empty
+// (it means "inherit"). An empty home leaves relative input untouched so
+// validation reports it instead of fabricating a path.
+func normalizeWorkDir(home, dir string) string {
+	switch {
+	case dir == "" || home == "":
+		return dir
+	case dir == "~":
+		return home
+	case strings.HasPrefix(dir, "~/"):
+		return filepath.Join(home, dir[2:])
+	case !filepath.IsAbs(dir):
+		return filepath.Join(home, dir)
+	default:
+		return filepath.Clean(dir)
+	}
+}
+
+// resolveWorkDir normalizes a non-empty work dir against the daemon user's
+// home and enforces that it exists as a directory, returning the absolute path
+// to store.
+func (h *Handlers) resolveWorkDir(dir string) (string, error) {
+	home, err := h.home()
+	if err != nil {
+		home = ""
+	}
+	normalized := normalizeWorkDir(home, dir)
+	if err := validateWorkDir(normalized); err != nil {
+		return "", err
+	}
+	return normalized, nil
+}
+
 // validateWorkDir enforces the API-layer rule for a set (non-empty) work dir: it
 // must be an absolute path to a directory that exists on the daemon host, so a
 // session started there does not fail at spawn time. The returned error's text
@@ -175,5 +215,5 @@ func validateWorkDir(dir string) error {
 
 // workDirErrMsg wraps a validateWorkDir failure in the client-facing 400 message.
 func workDirErrMsg(err error) string {
-	return "work_dir must be an existing absolute directory: " + err.Error()
+	return "work_dir must be an existing directory (absolute, ~/…, or home-relative): " + err.Error()
 }
