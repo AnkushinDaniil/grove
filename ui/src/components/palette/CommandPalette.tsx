@@ -79,6 +79,8 @@ export function CommandPalette() {
 
   async function ackAll() {
     const nodeIds = new Set(inboxEvents.map((e) => e.node_id));
+    const inbox = useInboxStore.getState();
+    nodeIds.forEach((id) => inbox.ackNodeOptimistic(id));
     await Promise.all([...nodeIds].map((id) => apiClient.ackNode(id).catch(() => {})));
     setOpen(false);
   }

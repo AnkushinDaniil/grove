@@ -46,6 +46,10 @@ func (s *recordStore) AppendEvents(_ context.Context, es []core.Event) error {
 	return nil
 }
 
+func (s *recordStore) AckNodeEvents(_ context.Context, _ core.NodeID, _ time.Time) ([]core.Event, error) {
+	return nil, nil
+}
+
 // newFixture builds a manager over a fake driver and a tree with a
 // root→project(driver=fake)→task hierarchy, returning the task node id.
 func newFixture(t *testing.T, cfg Config, script []fakeagent.Step) (*Manager, *tree.Tree, core.NodeID) {

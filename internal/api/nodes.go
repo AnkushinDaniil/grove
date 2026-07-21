@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/AnkushinDaniil/grove/internal/core"
 	"github.com/AnkushinDaniil/grove/internal/tree"
@@ -139,10 +138,6 @@ func (h *Handlers) handlePatchNode(w http.ResponseWriter, r *http.Request) {
 // attention events as read.
 func (h *Handlers) handleAckNode(w http.ResponseWriter, r *http.Request) {
 	id := pathID(r)
-	if _, err := h.store.AckNodeEvents(r.Context(), id, time.Now()); err != nil {
-		writeError(w, h.logger, err)
-		return
-	}
 	node, err := h.tree.Ack(r.Context(), id)
 	if err != nil {
 		writeError(w, h.logger, err)

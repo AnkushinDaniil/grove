@@ -109,6 +109,10 @@ func TestRunnerDispatchTransitions(t *testing.T) {
 	}
 }
 
+func (nopStore) AckNodeEvents(context.Context, core.NodeID, time.Time) ([]core.Event, error) {
+	return nil, nil
+}
+
 // TestRunnerRunNotifiesLive exercises the full Run loop over a real tree. It
 // toggles attention until the subscription (established asynchronously inside
 // Run) observes a transition, so it is robust to subscribe/raise ordering.

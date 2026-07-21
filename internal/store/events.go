@@ -97,6 +97,12 @@ func (s *Store) ListInbox(ctx context.Context) ([]core.Event, error) {
 	return events, nil
 }
 
+const selectUnackedForNodeSQL = `
+SELECT id, node_id, session_id, type, payload, requires_attention, acked_at, created_at
+FROM events
+WHERE node_id = ? AND requires_attention = 1 AND acked_at IS NULL
+`
+
 const ackNodeEventsSQL = `
 UPDATE events
 SET acked_at = ?
@@ -104,22 +110,34 @@ WHERE node_id = ? AND requires_attention = 1 AND acked_at IS NULL
 `
 
 // AckNodeEvents marks every unacknowledged attention-requiring event for
-// nodeID as acknowledged at at. Returns the number of events affected.
-func (s *Store) AckNodeEvents(ctx context.Context, nodeID core.NodeID, at time.Time) (int64, error) {
-	var affected int64
+// nodeID as acknowledged at at, and returns those events (with acked_at set)
+// so the caller can re-publish them to subscribers whose inbox is otherwise
+// only seeded at connect time.
+func (s *Store) AckNodeEvents(ctx context.Context, nodeID core.NodeID, at time.Time) ([]core.Event, error) {
+	var acked []core.Event
 	err := s.inTx(ctx, func(tx *sql.Tx) error {
-		res, err := tx.ExecContext(ctx, ackNodeEventsSQL, msFromTime(at), string(nodeID))
+		rows, err := tx.QueryContext(ctx, selectUnackedForNodeSQL, string(nodeID))
 		if err != nil {
+			return fmt.Errorf("list unacked events for node %s: %w", nodeID, err)
+		}
+		events, err := collect(rows, scanEvent)
+		if err != nil {
+			return err
+		}
+		if len(events) == 0 {
+			return nil
+		}
+		if _, err := tx.ExecContext(ctx, ackNodeEventsSQL, msFromTime(at), string(nodeID)); err != nil {
 			return fmt.Errorf("ack events for node %s: %w", nodeID, err)
 		}
-		affected, err = res.RowsAffected()
-		if err != nil {
-			return fmt.Errorf("rows affected: %w", err)
+		for i := range events {
+			events[i].AckedAt = at
 		}
+		acked = events
 		return nil
 	})
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	return affected, nil
+	return acked, nil
 }

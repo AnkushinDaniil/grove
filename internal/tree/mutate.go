@@ -162,7 +162,10 @@ func (t *Tree) SetWorkspaceDir(ctx context.Context, id core.NodeID, dir string) 
 	return node, nil
 }
 
-// Ack clears the node's attention flag.
+// Ack clears the node's attention flag AND marks its unacknowledged attention
+// events read, broadcasting both in one delta. Re-publishing the acked events
+// is what lets connected clients drop the inbox/badge counts — those counts are
+// derived from unacked events, which are otherwise only seeded at connect time.
 func (t *Tree) Ack(ctx context.Context, id core.NodeID) (core.Node, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -170,18 +173,32 @@ func (t *Tree) Ack(ctx context.Context, id core.NodeID) (core.Node, error) {
 	if !ok {
 		return core.Node{}, fmt.Errorf("%w: node %s not found", core.ErrInvalid, id)
 	}
-	if node.Attention == core.AttentionNone {
-		return node, nil
+
+	acked, err := t.store.AckNodeEvents(ctx, id, t.now())
+	if err != nil {
+		return core.Node{}, fmt.Errorf("ack node events: %w", err)
 	}
-	node.Attention = core.AttentionNone
-	node.AttentionReason = ""
-	node.AttentionSince = time.Time{}
-	node.UpdatedAt = t.now()
-	if err := t.store.SaveNodes(ctx, []core.Node{node}); err != nil {
-		return core.Node{}, fmt.Errorf("persist node: %w", err)
+
+	clearedAttention := node.Attention != core.AttentionNone
+	if clearedAttention {
+		node.Attention = core.AttentionNone
+		node.AttentionReason = ""
+		node.AttentionSince = time.Time{}
+		node.UpdatedAt = t.now()
+		if err := t.store.SaveNodes(ctx, []core.Node{node}); err != nil {
+			return core.Node{}, fmt.Errorf("persist node: %w", err)
+		}
+		t.nodes[id] = node
 	}
-	t.nodes[id] = node
-	t.broadcastLocked(Delta{Nodes: []core.Node{node}})
+
+	if !clearedAttention && len(acked) == 0 {
+		return node, nil // nothing changed
+	}
+	delta := Delta{Events: acked}
+	if clearedAttention {
+		delta.Nodes = []core.Node{node}
+	}
+	t.broadcastLocked(delta)
 	return node, nil
 }
 

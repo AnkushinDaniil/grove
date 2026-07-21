@@ -54,8 +54,11 @@ export function InboxView() {
   }, []);
 
   async function ackNode(nodeId: NodeID) {
+    // Clear the badge instantly; the authoritative acked events arrive over
+    // the WS moments later and confirm it.
+    useInboxStore.getState().ackNodeOptimistic(nodeId);
     await apiClient.ackNode(nodeId).catch(() => {
-      // Best-effort; the item stays put and the user can retry.
+      // Best-effort; a failed ack is reconciled on the next snapshot.
     });
   }
 

@@ -49,6 +49,15 @@ func (f *fakeStore) AppendEvents(_ context.Context, es []core.Event) error {
 	return nil
 }
 
+func (f *fakeStore) AckNodeEvents(_ context.Context, _ core.NodeID, _ time.Time) ([]core.Event, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.fail != nil {
+		return nil, f.fail
+	}
+	return nil, nil
+}
+
 func (f *fakeStore) setFail(err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

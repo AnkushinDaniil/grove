@@ -67,6 +67,7 @@ export function TreeRail({ mobileOpen, onMobileClose }: TreeRailProps) {
   }, []);
 
   const handleAck = useCallback((id: NodeID) => {
+    useInboxStore.getState().ackNodeOptimistic(id);
     void apiClient.ackNode(id).catch(() => {
       // Best-effort: a WS delta (or manual retry) reconciles state; not
       // worth a dedicated error surface for a single-node ack.

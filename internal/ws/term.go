@@ -78,9 +78,6 @@ func (h *Handlers) ackOnInput(ctx context.Context, sid core.SessionID) {
 	if !ok || node.Attention == core.AttentionNone {
 		return
 	}
-	if _, err := h.store.AckNodeEvents(ctx, node.ID, time.Now()); err != nil {
-		h.logger.Warn("terminal auto-ack events", "node", node.ID, "err", err)
-	}
 	if _, err := h.tree.Ack(ctx, node.ID); err != nil {
 		h.logger.Warn("terminal auto-ack node", "node", node.ID, "err", err)
 	}

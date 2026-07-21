@@ -113,12 +113,15 @@ func TestInboxAndAckFlow(t *testing.T) {
 	}
 
 	at := msTime(1_700_000_020_000)
-	affected, err := s.AckNodeEvents(t.Context(), n1.ID, at)
+	acked, err := s.AckNodeEvents(t.Context(), n1.ID, at)
 	if err != nil {
 		t.Fatalf("AckNodeEvents: %v", err)
 	}
-	if affected != 1 {
-		t.Errorf("AckNodeEvents affected = %d, want 1", affected)
+	if len(acked) != 1 || acked[0].ID != attn1.ID {
+		t.Errorf("AckNodeEvents returned = %v, want [%s]", ids(acked), attn1.ID)
+	}
+	if !acked[0].AckedAt.Equal(at) {
+		t.Errorf("acked event AckedAt = %v, want %v", acked[0].AckedAt, at)
 	}
 
 	inboxAfter, err := s.ListInbox(t.Context())
@@ -129,13 +132,13 @@ func TestInboxAndAckFlow(t *testing.T) {
 		t.Errorf("ListInbox after ack ids = %v, want [%s]", ids(inboxAfter), attn2.ID)
 	}
 
-	// Acking again finds nothing left to ack: not an error, zero affected.
-	affected2, err := s.AckNodeEvents(t.Context(), n1.ID, at)
+	// Acking again finds nothing left to ack: not an error, empty result.
+	acked2, err := s.AckNodeEvents(t.Context(), n1.ID, at)
 	if err != nil {
 		t.Fatalf("AckNodeEvents (second): %v", err)
 	}
-	if affected2 != 0 {
-		t.Errorf("second AckNodeEvents affected = %d, want 0", affected2)
+	if len(acked2) != 0 {
+		t.Errorf("second AckNodeEvents returned = %v, want none", ids(acked2))
 	}
 }
 

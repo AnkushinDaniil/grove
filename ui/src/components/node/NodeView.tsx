@@ -3,6 +3,7 @@ import { useParams } from "react-router";
 import clsx from "clsx";
 import { AlertTriangle } from "lucide-react";
 import { useTreeStore } from "../../state/tree";
+import { useInboxStore } from "../../state/inbox";
 import { useRollup } from "../../hooks/useRollup";
 import { apiClient } from "../../state/api";
 import { ATTENTION_LABEL, FOCUS_RING } from "../../lib/constants";
@@ -56,6 +57,7 @@ export function NodeView() {
   useEffect(() => {
     if (!id || attention === "none") return;
     const timer = setTimeout(() => {
+      useInboxStore.getState().ackNodeOptimistic(id);
       void apiClient.ackNode(id).catch(() => {
         // Best-effort: a failed auto-ack just leaves the badge until the next view.
       });

@@ -84,12 +84,9 @@ func (h *Handlers) handlePrompt(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// autoAck clears a node's attention as a side effect of the user responding;
-// failures only log — the primary action already succeeded.
+// autoAck clears a node's attention (and its unacked events) as a side effect
+// of the user responding; failures only log — the primary action succeeded.
 func (h *Handlers) autoAck(ctx context.Context, nodeID core.NodeID) {
-	if _, err := h.store.AckNodeEvents(ctx, nodeID, time.Now()); err != nil {
-		h.logger.Warn("auto-ack events", "node", nodeID, "err", err)
-	}
 	if _, err := h.tree.Ack(ctx, nodeID); err != nil {
 		h.logger.Warn("auto-ack node", "node", nodeID, "err", err)
 	}

@@ -2,6 +2,7 @@ import { useState } from "react";
 import clsx from "clsx";
 import { Archive, Check, Play, Plus, Square, Terminal as TerminalIcon } from "lucide-react";
 import { apiClient } from "../../state/api";
+import { useInboxStore } from "../../state/inbox";
 import { CHILD_KIND_FOR, FOCUS_RING } from "../../lib/constants";
 import { ConfirmDialog } from "../common/ConfirmDialog";
 import { InlineCreateRow } from "../tree/InlineCreateRow";
@@ -49,6 +50,7 @@ export function ActionsRow({ node, activeSession, busy, onStartPty, onOpenHeadle
   const childKind = CHILD_KIND_FOR[node.kind];
 
   async function ack() {
+    useInboxStore.getState().ackNodeOptimistic(node.id);
     await apiClient.ackNode(node.id).catch(() => {
       // Best-effort; the chip stays put and the user can retry.
     });
