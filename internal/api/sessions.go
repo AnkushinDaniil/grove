@@ -29,6 +29,14 @@ func (h *Handlers) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := pathID(r)
+	if req.ResumeID != "" {
+		resumeID, err := h.resolveResumeID(r.Context(), id, req.ResumeID)
+		if err != nil {
+			writeErrorStatus(w, h.logger, http.StatusBadRequest, err.Error())
+			return
+		}
+		req.ResumeID = resumeID
+	}
 	// Detach from the request: a launched session outlives the HTTP request and
 	// must not be torn down if the client disconnects.
 	sess, err := h.sessions.Start(

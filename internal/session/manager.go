@@ -351,6 +351,14 @@ func (m *Manager) finalize(ls *liveSession, code int, infraErr error) {
 		final.ExitCode = &c
 	}
 
+	// The CLI's exit farewell carries the authoritative conversation id;
+	// prefer it over anything hooks captured (see ExtractResumeID).
+	if final.Mode == core.ModePTY {
+		if id := resumeIDFromScrollback(m.cfg.ScrollbackDir, final.ID); id != "" {
+			final.DriverSessionID = id
+		}
+	}
+
 	// Best effort: the process is already gone, so a persistence failure here
 	// has no recovery path beyond the store's own error surfacing.
 	_, _ = m.tree.ApplySession(m.baseCtx, final)

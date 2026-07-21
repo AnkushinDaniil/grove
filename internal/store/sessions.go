@@ -88,3 +88,41 @@ func (s *Store) MarkInterrupted(ctx context.Context, at time.Time) (int64, error
 	}
 	return affected, nil
 }
+
+const sessionsForNodeSQL = `
+SELECT id, node_id, driver, profile_id, mode, driver_session_id,
+	parent_driver_session_id, status, exit_code, transcript_path, cwd,
+	started_at, ended_at
+FROM sessions
+WHERE node_id = ?
+ORDER BY started_at DESC, id DESC
+`
+
+// SessionsForNode returns every session ever bound to a node, newest first —
+// the resume fallback walks this history for a conversation that still exists.
+func (s *Store) SessionsForNode(ctx context.Context, nodeID core.NodeID) ([]core.Session, error) {
+	rows, err := s.db.QueryContext(ctx, sessionsForNodeSQL, string(nodeID))
+	if err != nil {
+		return nil, fmt.Errorf("query sessions for node %s: %w", nodeID, err)
+	}
+	return collect(rows, scanSession)
+}
+
+const sessionsSansResumeSQL = `
+SELECT id, node_id, driver, profile_id, mode, driver_session_id,
+	parent_driver_session_id, status, exit_code, transcript_path, cwd,
+	started_at, ended_at
+FROM sessions
+WHERE driver_session_id = '' AND mode = 'pty'
+`
+
+// SessionsWithoutResumeID returns PTY sessions persisted without a
+// conversation id (pre-hook-wiring history) so startup can backfill them from
+// scrollback farewells.
+func (s *Store) SessionsWithoutResumeID(ctx context.Context) ([]core.Session, error) {
+	rows, err := s.db.QueryContext(ctx, sessionsSansResumeSQL)
+	if err != nil {
+		return nil, fmt.Errorf("query sessions without resume id: %w", err)
+	}
+	return collect(rows, scanSession)
+}

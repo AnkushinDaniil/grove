@@ -82,6 +82,13 @@ func buildServer(ctx context.Context, logger *slog.Logger, layout config.Layout,
 	if _, err := st.MarkInterrupted(ctx, time.Now()); err != nil {
 		return nil, closeOnErr(st, fmt.Errorf("recover interrupted sessions: %w", err))
 	}
+	// Heal resume ids for sessions recorded before hook wiring existed: their
+	// scrollback farewells carry the authoritative conversation id.
+	if n, err := session.BackfillResumeIDs(ctx, st, layout.Scrollback); err != nil {
+		logger.Warn("backfill resume ids", "err", err)
+	} else if n > 0 {
+		logger.Info("backfilled resume ids from scrollback farewells", "sessions", n)
+	}
 	nodes, sessions, err := st.LoadLive(ctx)
 	if err != nil {
 		return nil, closeOnErr(st, fmt.Errorf("load live state: %w", err))
