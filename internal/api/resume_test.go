@@ -22,7 +22,7 @@ func resumeFixture(t *testing.T, transcripts ...string) (*Handlers, core.NodeID,
 		t.Fatal(err)
 	}
 	for _, id := range transcripts {
-		if err := os.WriteFile(filepath.Join(projects, id+".jsonl"), []byte("{}\n"), 0o600); err != nil {
+		if err := os.WriteFile(filepath.Join(projects, id+".jsonl"), []byte(`{"type":"user","message":{"role":"user"}}`+"\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}

@@ -1,8 +1,11 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
+	"os"
 	"path/filepath"
 
 	"github.com/AnkushinDaniil/grove/internal/core"
@@ -44,13 +47,33 @@ func (h *Handlers) resolveResumeID(ctx context.Context, nodeID core.NodeID, requ
 	)
 }
 
-// claudeTranscriptExists reports whether a conversation id has a persisted
-// transcript under the default claude config dir (any project slug).
+// claudeTranscriptExists reports whether a conversation id has a persisted,
+// NON-EMPTY transcript under the default claude config dir (any project
+// slug). A file alone is not enough: interrupted sessions can leave a
+// few-hundred-byte "last-prompt" stub with no conversation in it, and
+// resuming a stub reproduces "No conversation found".
 func (h *Handlers) claudeTranscriptExists(id string) bool {
 	home, err := h.home()
 	if err != nil || home == "" || id == "" {
 		return true // cannot verify — do not block the attempt
 	}
 	matches, err := filepath.Glob(filepath.Join(home, ".claude", "projects", "*", id+".jsonl"))
-	return err == nil && len(matches) > 0
+	if err != nil || len(matches) == 0 {
+		return false
+	}
+	return transcriptHasConversation(matches[0])
+}
+
+// transcriptHasConversation scans the head of a transcript for an actual
+// message entry (stubs carry only bookkeeping lines).
+func transcriptHasConversation(path string) bool {
+	//nolint:gosec // G703: path comes from a home-rooted glob over the user's own transcripts (single-user loopback daemon; see fs.go trust model).
+	f, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer func() { _ = f.Close() }()
+	head := make([]byte, 32<<10)
+	n, _ := io.ReadFull(f, head)
+	return bytes.Contains(head[:n], []byte(`"message"`))
 }
