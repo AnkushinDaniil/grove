@@ -42,3 +42,15 @@ func TestScrubEnv(t *testing.T) {
 func contains(ss []string, want string) bool {
 	return slices.Contains(ss, want)
 }
+
+func TestSanitizePATHDropsShims(t *testing.T) {
+	in := "/var/folders/x/T/cmux-cli-shims/ABC:/Applications/cmux.app/Contents/Resources/bin:/usr/local/bin:/usr/bin"
+	got := sanitizePATH(in)
+	want := "/usr/local/bin:/usr/bin"
+	if got != want {
+		t.Fatalf("sanitizePATH = %q, want %q", got, want)
+	}
+	if clean := sanitizePATH("/usr/bin:/bin"); clean != "/usr/bin:/bin" {
+		t.Fatalf("clean PATH altered: %q", clean)
+	}
+}
