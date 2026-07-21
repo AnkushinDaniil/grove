@@ -25,6 +25,7 @@ func main() {
 		{"serve", "run the grove daemon in the foreground", runServe},
 		{"open", "open the web UI in a browser", runOpen},
 		{"service", "install/uninstall/status the login service (launchd/systemd)", runService},
+		{"memory", "install and check the MemPalace memory backend", runMemory},
 		{"hook", "internal: forward a CLI hook payload to the daemon", runHook},
 		{"version", "print version information", runVersion},
 	}

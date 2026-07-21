@@ -265,6 +265,19 @@ node tokens.
    all 34 — no tool-list bloat; briefings mandate "search memory before starting,
    record learnings at milestones".
 
+**Status — phase 1 (`grove memory`, implemented):** The zero-touch lifecycle
+(detect → install → init → health-probe) lands in `internal/memory` behind
+`grove memory <install|doctor|status>`. Confirmed ground truth (2026-07-21):
+MemPalace ships on **PyPI** as `mempalace` (console entry point `mempalace`,
+pinned `3.6.0`); the MCP server launches as `mempalace mcp` speaking
+newline-delimited JSON-RPC; the health probe is `initialize` → `tools/list`
+(the `mempalace_add_drawer`/`mempalace_search` write/read roundtrip is
+intentionally skipped so grove never writes into a live palace); data lives in
+`~/.mempalace` (marker `config.json`); `mempalace init` seeds it. Install channel
+preference is **`uv` → `pipx` → `pip`** — not npm; the "npm/uvx/brew" sketch above
+predated confirming the PyPI distribution. The daemon-as-MCP-client behaviors
+(recall injection, auto-capture, curated proxy tools) remain **phase 2**.
+
 ## 9. Spikes (gating M2 work)
 
 - **S1** cross-profile `--resume` with shared `projects/` (blocks the multi-account headline; fallback: cold handoff).
