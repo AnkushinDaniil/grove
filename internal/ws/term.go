@@ -60,16 +60,36 @@ func (h *Handlers) serveTerm(w http.ResponseWriter, r *http.Request) {
 	defer func() { _ = conn.CloseNow() }()
 
 	if handle, live := h.sessions.Terminal(sid); live {
-		h.serveTermLive(r.Context(), conn, handle)
+		h.serveTermLive(r.Context(), conn, handle, sid)
 		return
 	}
 	h.serveTermReplay(r.Context(), conn, sid)
 }
 
+// ackOnInput clears the session's node attention the moment the user starts
+// typing into the terminal — typing IS answering the permission prompt or
+// question the attention flagged.
+func (h *Handlers) ackOnInput(ctx context.Context, sid core.SessionID) {
+	sess, ok := h.tree.SessionByID(sid)
+	if !ok {
+		return
+	}
+	node, ok := h.tree.Get(sess.NodeID)
+	if !ok || node.Attention == core.AttentionNone {
+		return
+	}
+	if _, err := h.store.AckNodeEvents(ctx, node.ID, time.Now()); err != nil {
+		h.logger.Warn("terminal auto-ack events", "node", node.ID, "err", err)
+	}
+	if _, err := h.tree.Ack(ctx, node.ID); err != nil {
+		h.logger.Warn("terminal auto-ack node", "node", node.ID, "err", err)
+	}
+}
+
 // serveTermLive attaches to a running PTY: it applies the initial resize, sends
 // the scrollback replay, signals live, then pumps output to the client and
 // input back to the PTY until either side closes or the process exits.
-func (h *Handlers) serveTermLive(parent context.Context, conn *websocket.Conn, handle *term.Handle) {
+func (h *Handlers) serveTermLive(parent context.Context, conn *websocket.Conn, handle *term.Handle, sid core.SessionID) {
 	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
 
@@ -87,13 +107,21 @@ func (h *Handlers) serveTermLive(parent context.Context, conn *websocket.Conn, h
 		return
 	}
 
-	go pumpClient(ctx, cancel, conn, handle)
+	acked := false
+	onInput := func() {
+		if !acked {
+			acked = true
+			h.ackOnInput(ctx, sid)
+		}
+	}
+	go pumpClient(ctx, cancel, conn, handle, onInput)
 	pumpTerminal(ctx, conn, handle, live)
 }
 
 // pumpClient forwards client frames to the PTY: binary frames are keystrokes,
 // text frames are resize controls. Canceling on return tears down the writer.
-func pumpClient(ctx context.Context, cancel context.CancelFunc, conn *websocket.Conn, handle *term.Handle) {
+// onInput fires on keystroke frames (attention auto-ack).
+func pumpClient(ctx context.Context, cancel context.CancelFunc, conn *websocket.Conn, handle *term.Handle, onInput func()) {
 	defer cancel()
 	for {
 		typ, data, err := conn.Read(ctx)
@@ -102,6 +130,9 @@ func pumpClient(ctx context.Context, cancel context.CancelFunc, conn *websocket.
 		}
 		switch typ {
 		case websocket.MessageBinary:
+			if len(data) > 0 && onInput != nil {
+				onInput()
+			}
 			if err := handle.Write(data); err != nil {
 				return
 			}

@@ -55,6 +55,14 @@ func (t *Tree) subtreeLocked(id core.NodeID) []core.NodeID {
 	return out
 }
 
+// SessionByID returns a session snapshot by its grove session id.
+func (t *Tree) SessionByID(id core.SessionID) (core.Session, bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	s, ok := t.sessions[id]
+	return s, ok
+}
+
 // SessionFor returns the latest session bound to a node.
 func (t *Tree) SessionFor(id core.NodeID) (core.Session, bool) {
 	t.mu.Lock()

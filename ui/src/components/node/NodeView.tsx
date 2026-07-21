@@ -49,6 +49,20 @@ export function NodeView() {
     setActionError(null);
   }, [id]);
 
+  // Viewing is seeing: once the node has been open for a beat, its attention
+  // badge auto-clears. The status chip (e.g. awaiting_input) still tells the
+  // truth about the session — attention only tracks "unseen".
+  const attention = node?.attention ?? "none";
+  useEffect(() => {
+    if (!id || attention === "none") return;
+    const timer = setTimeout(() => {
+      void apiClient.ackNode(id).catch(() => {
+        // Best-effort: a failed auto-ack just leaves the badge until the next view.
+      });
+    }, 1200);
+    return () => clearTimeout(timer);
+  }, [id, attention]);
+
   if (!id) return null;
 
   if (!node) {
