@@ -40,6 +40,17 @@ type Config struct {
 	// BaseEnv builds the base environment for each spawned process. Nil means
 	// DefaultBaseEnv.
 	BaseEnv func() []string
+
+	// HookCommand is the "<grove> hook" invocation embedded in generated agent
+	// hook settings so native-hook drivers can phone events home. Empty disables
+	// hook wiring, preserving the unwired launch path.
+	HookCommand string
+	// DaemonURL is the daemon's own base URL (http://127.0.0.1:<port>) embedded in
+	// the generated hook wiring. Empty disables hook wiring.
+	DaemonURL string
+	// MintHookToken returns the per-node hook token embedded in the generated hook
+	// wiring, minted idempotently per node. Nil disables hook wiring.
+	MintHookToken func(nodeID core.NodeID) string
 }
 
 // LaunchOption mutates the driver LaunchSpec before the command is built. It is
@@ -150,6 +161,9 @@ func (m *Manager) Start(
 	for _, opt := range opts {
 		opt(&spec)
 	}
+	if spec.Hooks == nil {
+		spec.Hooks = m.hookWiring(drv.Capabilities(), nodeID)
+	}
 	execSpec, err := drv.NewCommand(spec)
 	if err != nil {
 		return core.Session{}, fmt.Errorf("build command: %w", err)
@@ -186,6 +200,26 @@ func (m *Manager) Start(
 		return m.startHeadless(sess, drv, execSpec)
 	default:
 		return core.Session{}, fmt.Errorf("%w: unknown session mode %q", core.ErrInvalid, mode)
+	}
+}
+
+// hookWiring builds native-hook wiring for nodeID when the driver supports hooks
+// and the manager was configured with the command, daemon URL and token minter
+// needed to phone events home. It returns nil to leave the launch unwired,
+// preserving the no-hooks path for any driver or configuration missing a piece.
+func (m *Manager) hookWiring(caps driver.Caps, nodeID core.NodeID) *driver.HookWiring {
+	if !caps.NativeHooks || m.cfg.HookCommand == "" || m.cfg.DaemonURL == "" || m.cfg.MintHookToken == nil {
+		return nil
+	}
+	token := m.cfg.MintHookToken(nodeID)
+	if token == "" {
+		return nil
+	}
+	return &driver.HookWiring{
+		HookCommand: m.cfg.HookCommand,
+		DaemonURL:   m.cfg.DaemonURL,
+		NodeID:      nodeID,
+		Token:       token,
 	}
 }
 

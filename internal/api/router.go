@@ -43,12 +43,6 @@ type Config struct {
 	Version string
 	Commit  string
 
-	// DaemonURL is the daemon's own base URL (http://127.0.0.1:<port>) embedded
-	// in generated hook wiring. HookCommand is the "<grove> hook" invocation the
-	// agent runs to phone events home; empty disables hook wiring for launches.
-	DaemonURL   string
-	HookCommand string
-
 	// Home resolves the daemon user's home directory for filesystem completion
 	// (GET /fs/dirs). Injected as a seam so tests are independent of $HOME; nil
 	// defaults to os.UserHomeDir.
@@ -65,11 +59,9 @@ type Handlers struct {
 	hookTokens *HookTokens
 	logger     *slog.Logger
 
-	version     string
-	commit      string
-	daemonURL   string
-	hookCommand string
-	home        func() (string, error)
+	version string
+	commit  string
+	home    func() (string, error)
 }
 
 // New builds Handlers from cfg.
@@ -83,18 +75,16 @@ func New(cfg Config) *Handlers {
 		home = os.UserHomeDir
 	}
 	return &Handlers{
-		tree:        cfg.Tree,
-		sessions:    cfg.Sessions,
-		store:       cfg.Store,
-		worktrees:   cfg.Worktrees,
-		auth:        cfg.Auth,
-		hookTokens:  cfg.HookTokens,
-		logger:      logger,
-		version:     cfg.Version,
-		commit:      cfg.Commit,
-		daemonURL:   cfg.DaemonURL,
-		hookCommand: cfg.HookCommand,
-		home:        home,
+		tree:       cfg.Tree,
+		sessions:   cfg.Sessions,
+		store:      cfg.Store,
+		worktrees:  cfg.Worktrees,
+		auth:       cfg.Auth,
+		hookTokens: cfg.HookTokens,
+		logger:     logger,
+		version:    cfg.Version,
+		commit:     cfg.Commit,
+		home:       home,
 	}
 }
 

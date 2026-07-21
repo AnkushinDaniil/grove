@@ -59,7 +59,9 @@ export function TerminalTab({ node, session, onStartPty, onOpenHeadless }: Termi
           />
         )}
       </div>
-      <PromptInputBar nodeId={node.id} />
+      {/* PTY sessions have the CLI's own input inside the terminal — a second
+          send box is just confusing. The bar is load-bearing for headless. */}
+      {session.mode !== "pty" && <PromptInputBar nodeId={node.id} />}
     </div>
   );
 }

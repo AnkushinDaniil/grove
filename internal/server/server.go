@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/AnkushinDaniil/grove/internal/api"
+	"github.com/AnkushinDaniil/grove/internal/notify"
 	"github.com/AnkushinDaniil/grove/internal/session"
 	"github.com/AnkushinDaniil/grove/internal/store"
 	"github.com/AnkushinDaniil/grove/internal/ws"
@@ -34,6 +35,9 @@ type Config struct {
 	Sessions *session.Manager
 	Store    *store.Store
 	Logger   *slog.Logger
+	// Notify watches the tree for attention transitions and dispatches desktop
+	// notifications. Nil disables notifications.
+	Notify *notify.Runner
 }
 
 // Server binds the daemon's HTTP surface and manages its lifecycle.
@@ -43,9 +47,13 @@ type Server struct {
 	sessions   *session.Manager
 	store      *store.Store
 	logger     *slog.Logger
+	notify     *notify.Runner
 
 	baseCtx    context.Context
 	baseCancel context.CancelFunc
+	// notifyDone closes when the notification runner has stopped; it is closed
+	// immediately when no runner is configured so shutdown never blocks on it.
+	notifyDone chan struct{}
 }
 
 // New assembles the routing tree and returns a ready-to-run Server.
@@ -60,8 +68,10 @@ func New(cfg Config) *Server {
 		sessions:   cfg.Sessions,
 		store:      cfg.Store,
 		logger:     logger,
+		notify:     cfg.Notify,
 		baseCtx:    baseCtx,
 		baseCancel: baseCancel,
+		notifyDone: make(chan struct{}),
 	}
 
 	root := http.NewServeMux()
@@ -100,10 +110,14 @@ func (s *Server) Run(ctx context.Context) error {
 	}()
 
 	s.logger.Info("grove daemon listening", "addr", s.httpServer.Addr)
+	s.startNotify()
 
 	select {
 	case err := <-errCh:
-		// Server stopped on its own (e.g. the port was already in use).
+		// Server stopped on its own (e.g. the port was already in use). Stop the
+		// notification runner too, since we return without a graceful shutdown.
+		s.baseCancel()
+		<-s.notifyDone
 		if err != nil {
 			return fmt.Errorf("serve: %w", err)
 		}
@@ -115,17 +129,36 @@ func (s *Server) Run(ctx context.Context) error {
 	return s.shutdown(errCh)
 }
 
+// startNotify launches the attention-notification runner bound to the server
+// lifetime (baseCtx). With no runner configured it closes notifyDone at once so
+// shutdown never waits on it.
+func (s *Server) startNotify() {
+	if s.notify == nil {
+		close(s.notifyDone)
+		return
+	}
+	go func() {
+		defer close(s.notifyDone)
+		s.notify.Run(s.baseCtx)
+	}()
+}
+
 // shutdown performs the ordered graceful teardown and joins any errors.
 func (s *Server) shutdown(errCh <-chan error) error {
 	s.logger.Info("grove daemon shutting down")
 	// Signal WebSocket handlers (hijacked connections http.Server.Shutdown does
-	// not track) to close.
+	// not track) and the notification runner to close.
 	s.baseCancel()
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 
 	var errs []error
+	select {
+	case <-s.notifyDone:
+	case <-shutdownCtx.Done():
+		errs = append(errs, fmt.Errorf("notify shutdown: %w", shutdownCtx.Err()))
+	}
 	if err := s.httpServer.Shutdown(shutdownCtx); err != nil {
 		errs = append(errs, fmt.Errorf("http shutdown: %w", err))
 	}

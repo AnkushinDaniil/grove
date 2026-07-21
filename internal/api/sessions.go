@@ -6,8 +6,6 @@ import (
 	"time"
 
 	"github.com/AnkushinDaniil/grove/internal/core"
-	"github.com/AnkushinDaniil/grove/internal/driver"
-	"github.com/AnkushinDaniil/grove/internal/session"
 )
 
 // stopTimeout bounds a stop request so it returns even if a process ignores the
@@ -21,8 +19,9 @@ type createSessionRequest struct {
 	ResumeID string `json:"resume_id"`
 }
 
-// handleCreateSession starts a session for a node, wiring per-node hook tokens
-// so the agent can authenticate its callbacks.
+// handleCreateSession starts a session for a node. Native-hook wiring (minting
+// the per-node token and embedding the hook command) is owned by the session
+// manager, which gates it on the resolved driver's capabilities.
 func (h *Handlers) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 	var req createSessionRequest
 	if err := decodeJSON(w, r, &req); err != nil {
@@ -38,7 +37,6 @@ func (h *Handlers) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 		core.SessionMode(req.Mode),
 		req.Prompt,
 		req.ResumeID,
-		h.hookLaunchOptions(id)...,
 	)
 	if err != nil {
 		writeError(w, h.logger, err)
@@ -101,24 +99,4 @@ func (h *Handlers) handleStopSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
-}
-
-// hookLaunchOptions mints (or reuses) the node's hook token and, when a hook
-// command is configured, returns a launch option wiring the driver to phone
-// events home authenticated by that token. The token is registered even when no
-// command is configured so POST /internal/hook can still validate it.
-func (h *Handlers) hookLaunchOptions(nodeID core.NodeID) []session.LaunchOption {
-	token := h.hookTokens.Mint(nodeID)
-	if h.hookCommand == "" {
-		return nil
-	}
-	wiring := &driver.HookWiring{
-		HookCommand: h.hookCommand,
-		DaemonURL:   h.daemonURL,
-		NodeID:      nodeID,
-		Token:       token,
-	}
-	return []session.LaunchOption{func(spec *driver.LaunchSpec) {
-		spec.Hooks = wiring
-	}}
 }

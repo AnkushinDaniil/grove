@@ -20,10 +20,12 @@ import (
 	"github.com/AnkushinDaniil/grove/internal/driver/gemini"
 	"github.com/AnkushinDaniil/grove/internal/driver/opencode"
 	"github.com/AnkushinDaniil/grove/internal/gitcli"
+	"github.com/AnkushinDaniil/grove/internal/notify"
 	"github.com/AnkushinDaniil/grove/internal/server"
 	"github.com/AnkushinDaniil/grove/internal/session"
 	"github.com/AnkushinDaniil/grove/internal/store"
 	"github.com/AnkushinDaniil/grove/internal/tree"
+	usageagg "github.com/AnkushinDaniil/grove/internal/usage"
 	"github.com/AnkushinDaniil/grove/internal/worktree"
 	"github.com/AnkushinDaniil/grove/internal/ws"
 )
@@ -106,22 +108,32 @@ func buildServer(ctx context.Context, logger *slog.Logger, layout config.Layout,
 		return nil, closeOnErr(st, fmt.Errorf("build driver registry: %w", err))
 	}
 
-	mgr := session.NewManager(reg, tr, session.Config{ScrollbackDir: layout.Scrollback})
+	// Hook wiring shares one token registry between the session manager (which
+	// mints a per-node token into each native-hook launch) and the API (which
+	// validates the agent's callbacks against it).
+	daemonURL := fmt.Sprintf("http://127.0.0.1:%d", port)
+	hookCmd := hookCommand(logger)
+	hookTokens := api.NewHookTokens()
+
+	mgr := session.NewManager(reg, tr, session.Config{
+		ScrollbackDir: layout.Scrollback,
+		HookCommand:   hookCmd,
+		DaemonURL:     daemonURL,
+		MintHookToken: hookTokens.Mint,
+	})
 	engine := worktree.NewEngine(gitcli.NewRunner(), layout.Worktrees, time.Now)
 	auth := api.NewAuth(token)
 
 	apiHandlers := api.New(api.Config{
-		Tree:        tr,
-		Sessions:    mgr,
-		Store:       st,
-		Worktrees:   engine,
-		Auth:        auth,
-		HookTokens:  api.NewHookTokens(),
-		Logger:      logger,
-		Version:     version,
-		Commit:      commit,
-		DaemonURL:   fmt.Sprintf("http://127.0.0.1:%d", port),
-		HookCommand: hookCommand(logger),
+		Tree:       tr,
+		Sessions:   mgr,
+		Store:      st,
+		Worktrees:  engine,
+		Auth:       auth,
+		HookTokens: hookTokens,
+		Logger:     logger,
+		Version:    version,
+		Commit:     commit,
 	})
 	wsHandlers := ws.New(ws.Config{
 		Tree:          tr,
@@ -130,6 +142,12 @@ func buildServer(ctx context.Context, logger *slog.Logger, layout config.Layout,
 		Logger:        logger,
 		ScrollbackDir: layout.Scrollback,
 	})
+	// Roll usage events up into usage_rollup so GET /usage serves live data; the
+	// aggregator runs off ctx and does a final flush when the daemon shuts down.
+	usageagg.New(st, tr, logger).Start(ctx)
+	// Coalesce attention notifications through the platform sink and drive them
+	// off tree deltas; the server owns the runner's start/stop lifecycle.
+	notifyRunner := notify.NewRunner(tr, notify.NewCoalescer(notify.New(logger), time.Now), daemonURL, logger)
 	//nolint:contextcheck // New is a pure constructor; the server owns its own lifetime context.
 	return server.New(server.Config{
 		Addr:     fmt.Sprintf("127.0.0.1:%d", port),
@@ -139,6 +157,7 @@ func buildServer(ctx context.Context, logger *slog.Logger, layout config.Layout,
 		Sessions: mgr,
 		Store:    st,
 		Logger:   logger,
+		Notify:   notifyRunner,
 	}), nil
 }
 

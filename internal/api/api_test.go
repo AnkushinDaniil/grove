@@ -82,7 +82,6 @@ func newHarness(t *testing.T, script []fakeagent.Step) *harness {
 		HookTokens: hookTokens,
 		Version:    "v-test",
 		Commit:     "commit-test",
-		DaemonURL:  "http://127.0.0.1:0",
 	})
 	ts := httptest.NewServer(h.Routes())
 	t.Cleanup(ts.Close)

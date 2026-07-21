@@ -59,7 +59,7 @@ func buildConfig(t *testing.T, addr string) (Config, core.NodeID) {
 		API: api.New(api.Config{
 			Tree: tr, Sessions: mgr, Store: st, Worktrees: engine,
 			Auth: auth, HookTokens: api.NewHookTokens(),
-			Version: "v", Commit: "c", DaemonURL: "http://" + addr,
+			Version: "v", Commit: "c",
 		}),
 		WS:       ws.New(ws.Config{Tree: tr, Sessions: mgr, Store: st, ScrollbackDir: t.TempDir()}),
 		Sessions: mgr,
