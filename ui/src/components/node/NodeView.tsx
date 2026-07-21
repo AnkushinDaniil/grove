@@ -94,6 +94,10 @@ export function NodeView() {
     await runAction(() => apiClient.stopSession(activeSession.id));
   }
 
+  async function resumePty(driverSessionId: string) {
+    await runAction(() => apiClient.createSession(node!.id, { mode: "pty", resume_id: driverSessionId }));
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="shrink-0 space-y-2.5 border-b border-border px-5 py-3">
@@ -166,9 +170,11 @@ export function NodeView() {
         {tab === "terminal" && (
           <TerminalTab
             node={node}
-            session={activeSession}
+            latestSession={session}
+            activeSession={activeSession}
             onStartPty={() => void startPty()}
             onOpenHeadless={() => setHeadlessOpen(true)}
+            onResume={(id) => void resumePty(id)}
           />
         )}
         {tab === "events" && <EventsTab nodeId={id} />}
