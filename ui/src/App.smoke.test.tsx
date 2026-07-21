@@ -46,7 +46,7 @@ describe("App smoke (mock mode)", () => {
 
     // This node has no session, so the Terminal tab's empty state renders
     // (and XtermHost/xterm never mounts, keeping this test browser-free).
-    expect(screen.getByText("No active session")).toBeInTheDocument();
+    expect(screen.getByText("No session yet")).toBeInTheDocument();
 
     // Mobile nav chrome (always mounted, CSS-hidden by breakpoint) renders
     // without crashing -- BottomTabs, MobileTopBar's hamburger.
