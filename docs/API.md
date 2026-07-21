@@ -108,8 +108,17 @@ unknown ids → 404, auth → 401.
 }
 ```
 
-The daemon aggregates usage locally from session transcripts (no network calls);
-until the aggregator lands the endpoint returns `{"profiles": []}`.
+The daemon aggregates usage locally (no network calls) from grove's own
+normalized `usage` events: the aggregator backfills historical events once at
+startup and then folds live usage off the tree's delta feed into 5-minute
+rollup buckets. `window=5h` sums a rolling last 5 hours, `window=week` a rolling
+7 days (default `5h`; any other value → 400). It returns one `UsageWindow` per
+`(profile_id, driver)` with usage in the window — the empty (inherited) profile
+reports `name: "default"`, and the driver comes from the event's session. In
+this iteration `utilization` is always `null` (no plan-limit model yet, so the
+UI renders raw token counts), `cache_read_tokens` is `0`, and
+`resets_at`/`cooldown_until` are omitted (rate-limit detection not yet wired).
+No usage in the window → `{"profiles": []}`.
 
 ### `GET /stats?scope=<node_id>&range=24h|7d|30d` (draft — additive evolution allowed)
 
