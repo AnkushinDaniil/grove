@@ -38,7 +38,23 @@ describe("ReviewsView (mock mode)", () => {
     expect(screen.getByText("Your PRs")).toBeInTheDocument();
   });
 
-  it("starting a review calls the mock API and navigates to the created node", async () => {
+  it("clicking a PR's 'Review in grove' navigates straight to its review workspace route", async () => {
+    const router = createMemoryRouter(
+      [
+        { path: "/reviews", element: <ReviewsView /> },
+        { path: "/review/:dir/:pr", element: <div data-testid="review-workspace" /> },
+      ],
+      { initialEntries: ["/reviews"] },
+    );
+    render(<RouterProvider router={router} />);
+
+    const [firstReviewButton] = await screen.findAllByRole("button", { name: /review in grove/i });
+    fireEvent.click(firstReviewButton);
+
+    expect(await screen.findByTestId("review-workspace")).toBeInTheDocument();
+  });
+
+  it("'Open as task' still spawns a review task node via the mock API and navigates to it", async () => {
     const router = createMemoryRouter(
       [
         { path: "/reviews", element: <ReviewsView /> },
@@ -48,8 +64,8 @@ describe("ReviewsView (mock mode)", () => {
     );
     render(<RouterProvider router={router} />);
 
-    const [firstReviewButton] = await screen.findAllByRole("button", { name: /review in grove/i });
-    fireEvent.click(firstReviewButton);
+    const [firstOpenAsTask] = await screen.findAllByRole("button", { name: /open as task/i });
+    fireEvent.click(firstOpenAsTask);
 
     expect(await screen.findByTestId("node-view")).toBeInTheDocument();
   });

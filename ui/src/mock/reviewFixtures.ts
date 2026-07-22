@@ -42,6 +42,20 @@ export function buildReviewFixtureRepos(): ReviewRepo[] {
             additions: 310,
             deletions: 12,
           }),
+          // Also the hero fixture for the interactive review workspace (see
+          // mock/prReviewFixtures.ts) -- reachable both by direct URL and by
+          // clicking "Review in grove" here, the feature's real entry point.
+          pr({
+            number: 12540,
+            title: "Fix nonce ordering check in TxPool.Insert and add regression test",
+            author: "asdacap",
+            is_draft: false,
+            updated_at: ago(15 * MIN),
+            review_decision: "REVIEW_REQUIRED",
+            checks: "passing",
+            additions: 23,
+            deletions: 4,
+          }),
         ],
         re_review: [
           pr({

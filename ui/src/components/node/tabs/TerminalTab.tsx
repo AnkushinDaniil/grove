@@ -33,22 +33,24 @@ export function TerminalTab({ node, latestSession, activeSession, onStartPty, on
       <EmptyState
         icon={<TerminalIcon size={28} strokeWidth={1.5} />}
         title="No session yet"
-        description="Start a PTY session to attach a live terminal, or run headless with an initial prompt."
+        description="Start an interactive session to attach a live terminal, or run headless to hand the agent a prompt and let it work on its own."
         action={
           <div className="flex gap-2">
             <button
               type="button"
               onClick={onStartPty}
+              title="Open an interactive terminal — attach and type, like running the CLI yourself"
               className="rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-accent-ink hover:bg-accent-strong"
             >
-              Start PTY session
+              Start session
             </button>
             <button
               type="button"
               onClick={onOpenHeadless}
+              title="Give a prompt and let the agent work autonomously in the background — no terminal to type in; watch the Events tab"
               className="rounded-md border border-border-strong px-3 py-1.5 text-xs text-ink-muted hover:bg-hover hover:text-ink"
             >
-              Start headless…
+              Run headless…
             </button>
           </div>
         }

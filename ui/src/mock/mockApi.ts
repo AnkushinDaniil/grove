@@ -13,6 +13,7 @@ import { startMockSessionLifecycle } from "./scenarios";
 import { buildFixtureUsage } from "./fixtures";
 import { suggestDirsMock } from "./fakeFs";
 import { reviewWorld } from "./reviewWorld";
+import { prReviewWorld } from "./prReviewWorld";
 
 function nowISO(): string {
   return new Date().toISOString();
@@ -243,6 +244,34 @@ export async function createMockApiClient(): Promise<ApiClient> {
       };
       world.publish({ nodes: [created] });
       return created;
+    },
+
+    async getPRReview(dir, pr) {
+      return prReviewWorld.getReview(dir, pr);
+    },
+
+    async getReviewDrafts(dir, pr) {
+      return { drafts: prReviewWorld.getDrafts(dir, pr) };
+    },
+
+    async addReviewDraft(body) {
+      return prReviewWorld.addDraft(body);
+    },
+
+    async deleteReviewDraft(id) {
+      prReviewWorld.removeDraft(id);
+    },
+
+    async aiDraft(req) {
+      return prReviewWorld.aiDraft(req);
+    },
+
+    async submitReview(req) {
+      return prReviewWorld.submitReview(req);
+    },
+
+    async replyToThread(req) {
+      prReviewWorld.reply(req);
     },
   };
 }

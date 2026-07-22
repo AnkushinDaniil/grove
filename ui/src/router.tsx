@@ -4,6 +4,7 @@ import { WelcomeView } from "./components/node/WelcomeView";
 import { NodeView } from "./components/node/NodeView";
 import { InboxView } from "./components/inbox/InboxView";
 import { ReviewsView } from "./components/reviews/ReviewsView";
+import { ReviewWorkspace } from "./components/reviewWorkspace/ReviewWorkspace";
 
 export const router = createBrowserRouter([
   {
@@ -14,6 +15,9 @@ export const router = createBrowserRouter([
       { path: "n/:id", element: <NodeView /> },
       { path: "inbox", element: <InboxView /> },
       { path: "reviews", element: <ReviewsView /> },
+      // `dir` is URL-encoded by the caller (see PRRow's openWorkspace);
+      // react-router's useParams decodes it back automatically.
+      { path: "review/:dir/:pr", element: <ReviewWorkspace /> },
     ],
   },
 ]);

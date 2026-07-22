@@ -314,6 +314,146 @@ export interface ApiErrorBody {
   error: string;
 }
 
+// --- Interactive review workspace (/api/v1/reviews/pr) ---
+
+// " " = context, "+" = added, "-" = removed (unified diff op per line).
+export type DiffLineOp = " " | "+" | "-";
+
+export interface DiffLine {
+  op: DiffLineOp;
+  // 0 = not applicable for this op (e.g. old_line is 0 on an added line,
+  // new_line is 0 on a removed line) -- never both 0 for a real line.
+  old_line: number;
+  new_line: number;
+  text: string;
+}
+
+export interface DiffHunk {
+  header: string; // "@@ -a,b +c,d @@ ..."
+  lines: DiffLine[];
+}
+
+export type PRFileStatus = "modified" | "added" | "removed" | "renamed";
+
+export interface PRReviewFile {
+  path: string;
+  old_path?: string; // set when status === "renamed" and differs from path
+  status: PRFileStatus;
+  additions: number;
+  deletions: number;
+  binary: boolean;
+  // Empty when the diff body itself is unavailable (binary, or a diff `gh`
+  // declined to expand, e.g. too large) -- render a "view on GitHub"
+  // fallback in either case rather than an empty file section.
+  hunks: DiffHunk[];
+}
+
+// The diff side a thread/draft/comment anchors to: RIGHT = new-file line
+// number, LEFT = old-file line number (GitHub review-comment vocabulary).
+export type ReviewCommentSide = "LEFT" | "RIGHT";
+
+export interface ThreadComment {
+  id: string;
+  author: string;
+  body: string;
+  created_at: string;
+  is_mine: boolean;
+}
+
+export interface ReviewThread {
+  id: string;
+  path: string;
+  line: number;
+  side: ReviewCommentSide;
+  is_resolved: boolean;
+  diff_hunk: string;
+  comments: ThreadComment[];
+}
+
+// GitHub PR state as surfaced by `gh` -- API.md's example only shows "OPEN"
+// but a real `gh pr view` can report any of these three.
+export type PRReviewState = "OPEN" | "CLOSED" | "MERGED";
+
+export interface PRReview {
+  number: number;
+  title: string;
+  author: string;
+  url: string;
+  state: PRReviewState;
+  head_sha: string;
+  base_ref: string;
+  checks: ReviewChecksState;
+  review_decision: ReviewDecision;
+  body: string; // PR description (markdown)
+  files: PRReviewFile[];
+  threads: ReviewThread[];
+}
+
+// A pending review comment held in grove until submit.
+export interface DraftComment {
+  id: string;
+  dir: string;
+  pr: number;
+  path: string;
+  line: number;
+  side: ReviewCommentSide;
+  body: string;
+  created_at: string;
+}
+
+export interface ReviewDraftsResponse {
+  drafts: DraftComment[];
+}
+
+export interface AddReviewDraftRequest {
+  dir: string;
+  pr: number;
+  path: string;
+  line: number;
+  side: ReviewCommentSide;
+  body: string;
+}
+
+export type AiDraftKind = "comment" | "reply";
+
+export interface AiDraftRequest {
+  dir: string;
+  pr: number;
+  kind: AiDraftKind;
+  path?: string;
+  line?: number;
+  thread_id?: string;
+  /** Optional steering text -- typically whatever the user already typed
+   *  into the composer before requesting a draft. */
+  instruction?: string;
+}
+
+export interface AiDraftResponse {
+  text: string;
+}
+
+export type SubmitReviewEvent = "APPROVE" | "REQUEST_CHANGES" | "COMMENT";
+
+export interface SubmitReviewRequest {
+  dir: string;
+  pr: number;
+  event: SubmitReviewEvent;
+  body: string;
+  draft_ids: string[];
+}
+
+export interface SubmitReviewResponse {
+  url: string;
+}
+
+export interface ReplyToThreadRequest {
+  dir: string;
+  pr: number;
+  thread_id: string;
+  body: string;
+  resolve: boolean;
+}
+
 // --- WebSocket /ws/state (JSON text frames, server-push) ---
 
 export interface WSHello {

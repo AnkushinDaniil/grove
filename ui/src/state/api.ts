@@ -1,17 +1,26 @@
 import type {
+  AddReviewDraftRequest,
+  AiDraftRequest,
+  AiDraftResponse,
   ArchiveResponse,
   CreateNodeRequest,
   CreateSessionRequest,
   DirSuggestions,
+  DraftComment,
   Event,
   Node,
   PatchNodeRequest,
+  PRReview,
   PromptRequest,
+  ReplyToThreadRequest,
   ResumeTarget,
+  ReviewDraftsResponse,
   ReviewSources,
   ReviewsResponse,
   Session,
   StartReviewRequest,
+  SubmitReviewRequest,
+  SubmitReviewResponse,
   TreeSnapshot,
   UsageResponse,
   UsageWindowKind,
@@ -58,6 +67,22 @@ export interface ApiClient {
   setReviewSources(dirs: string[]): Promise<ReviewSources>;
   /** Spawns a read-only review task node for a PR; the caller navigates to it. */
   startReview(dir: string, pr: number, title?: string): Promise<Node>;
+
+  // --- Interactive review workspace (/api/v1/reviews/pr) ---
+  /** One PR's diff + inline comment threads. */
+  getPRReview(dir: string, pr: number): Promise<PRReview>;
+  getReviewDrafts(dir: string, pr: number): Promise<ReviewDraftsResponse>;
+  addReviewDraft(body: AddReviewDraftRequest): Promise<DraftComment>;
+  deleteReviewDraft(id: string): Promise<void>;
+  /** Runs a headless claude pass over the diff/thread context to suggest
+   *  comment or reply text; always human-reviewed/edited before it becomes
+   *  a draft or a posted reply. */
+  aiDraft(req: AiDraftRequest): Promise<AiDraftResponse>;
+  /** Posts one batch review (event + body + the referenced drafts) and
+   *  clears those drafts. */
+  submitReview(req: SubmitReviewRequest): Promise<SubmitReviewResponse>;
+  /** Posts an immediate reply to an existing thread, optionally resolving it. */
+  replyToThread(req: ReplyToThreadRequest): Promise<void>;
 }
 
 function isErrorBody(v: unknown): v is { error: string } {
@@ -164,6 +189,22 @@ export const realApiClient: ApiClient = {
       method: "POST",
       body: JSON.stringify({ dir, pr, title } satisfies StartReviewRequest),
     }),
+
+  getPRReview: (dir, pr) => request(`/reviews/pr${qs({ dir, pr })}`),
+
+  getReviewDrafts: (dir, pr) => request(`/reviews/pr/drafts${qs({ dir, pr })}`),
+
+  addReviewDraft: (body) =>
+    request("/reviews/pr/drafts", { method: "POST", body: JSON.stringify(body) }),
+
+  deleteReviewDraft: (id) =>
+    request(`/reviews/pr/drafts/${encodeURIComponent(id)}`, { method: "DELETE" }),
+
+  aiDraft: (req) => request("/reviews/pr/ai-draft", { method: "POST", body: JSON.stringify(req) }),
+
+  submitReview: (req) => request("/reviews/pr/submit", { method: "POST", body: JSON.stringify(req) }),
+
+  replyToThread: (req) => request("/reviews/pr/reply", { method: "POST", body: JSON.stringify(req) }),
 };
 
 // Mock mode swaps in an in-memory client. The dynamic import keeps src/mock/

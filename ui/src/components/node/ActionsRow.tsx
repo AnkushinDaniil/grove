@@ -14,18 +14,24 @@ interface ActionButtonProps {
   label: string;
   onClick: () => void;
   danger?: boolean;
+  primary?: boolean;
   disabled?: boolean;
+  title?: string;
 }
 
-function ActionButton({ icon: Icon, label, onClick, danger, disabled }: ActionButtonProps) {
+function ActionButton({ icon: Icon, label, onClick, danger, primary, disabled, title }: ActionButtonProps) {
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
+      title={title}
       className={clsx(
-        "flex min-h-11 items-center gap-1.5 rounded-md border border-border-strong px-2.5 py-1.5 text-xs text-ink-muted transition-colors hover:bg-hover hover:text-ink disabled:pointer-events-none disabled:opacity-40 md:min-h-0",
-        danger && "hover:border-danger/50 hover:bg-danger-soft hover:text-danger",
+        "flex min-h-11 items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs transition-colors disabled:pointer-events-none disabled:opacity-40 md:min-h-0",
+        primary
+          ? "border-accent bg-accent font-medium text-accent-ink hover:bg-accent-strong"
+          : "border-border-strong text-ink-muted hover:bg-hover hover:text-ink",
+        danger && "border-border-strong text-ink-muted hover:border-danger/50 hover:bg-danger-soft hover:text-danger",
         FOCUS_RING,
       )}
     >
@@ -73,8 +79,21 @@ export function ActionsRow({ node, activeSession, busy, onStartPty, onOpenHeadle
         <ActionButton icon={Square} label="Stop" onClick={onStopSession} disabled={busy} danger />
       ) : (
         <>
-          <ActionButton icon={TerminalIcon} label="Start PTY session" onClick={onStartPty} disabled={busy} />
-          <ActionButton icon={Play} label="Start headless…" onClick={onOpenHeadless} disabled={busy} />
+          <ActionButton
+            icon={TerminalIcon}
+            label="Start session"
+            onClick={onStartPty}
+            disabled={busy}
+            primary
+            title="Open an interactive terminal — attach and type, like running the CLI yourself"
+          />
+          <ActionButton
+            icon={Play}
+            label="Run headless…"
+            onClick={onOpenHeadless}
+            disabled={busy}
+            title="Give a prompt and let the agent work autonomously in the background — no terminal to type in; watch progress in the Events tab"
+          />
         </>
       )}
       {node.attention !== "none" && <ActionButton icon={Check} label="Ack" onClick={() => void ack()} />}

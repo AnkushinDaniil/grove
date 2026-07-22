@@ -1,7 +1,7 @@
 import { useState } from "react";
 import clsx from "clsx";
 import { useNavigate } from "react-router";
-import { AlertTriangle, ExternalLink, GitPullRequestArrow } from "lucide-react";
+import { AlertTriangle, ExternalLink, GitPullRequestArrow, Terminal as TerminalIcon } from "lucide-react";
 import { apiClient } from "../../state/api";
 import { FOCUS_RING } from "../../lib/constants";
 import { Pill } from "../common/Pill";
@@ -23,7 +23,17 @@ export function PRRow({ pr, dir, repoName }: PRRowProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function reviewInGrove() {
+  // Primary action: the interactive review workspace is the review now (see
+  // docs/API.md's "Interactive review workspace" section) -- no daemon call
+  // needed, just a route change.
+  function openWorkspace() {
+    navigate(`/review/${encodeURIComponent(dir)}/${pr.number}`);
+  }
+
+  // Secondary action: still spawns a read-only review task node (a per-PR
+  // agent conversation) for anyone who wants that instead of, or alongside,
+  // the workspace.
+  async function openAsTask() {
     setBusy(true);
     setError(null);
     try {
@@ -54,15 +64,27 @@ export function PRRow({ pr, dir, repoName }: PRRowProps) {
       <div className="ml-auto flex shrink-0 items-center gap-1.5">
         <button
           type="button"
-          onClick={() => void reviewInGrove()}
-          disabled={busy}
+          onClick={openWorkspace}
           className={clsx(
-            "flex min-h-9 items-center gap-1 rounded-md bg-accent px-2.5 py-1 text-2xs font-medium text-accent-ink hover:bg-accent-strong disabled:opacity-40",
+            "flex min-h-9 items-center gap-1 rounded-md bg-accent px-2.5 py-1 text-2xs font-medium text-accent-ink hover:bg-accent-strong",
             FOCUS_RING,
           )}
         >
           <GitPullRequestArrow size={12} />
           Review in grove
+        </button>
+        <button
+          type="button"
+          onClick={() => void openAsTask()}
+          disabled={busy}
+          title="Spawn a read-only review task node for this PR"
+          className={clsx(
+            "flex min-h-9 items-center gap-1 rounded-md border border-border-strong px-2.5 py-1 text-2xs text-ink-muted hover:bg-hover hover:text-ink disabled:opacity-40",
+            FOCUS_RING,
+          )}
+        >
+          <TerminalIcon size={12} />
+          Open as task
         </button>
         <a
           href={pr.url}
