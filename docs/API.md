@@ -214,6 +214,53 @@ instructing a read-only review of that PR — it then runs like any other node
 persisted per (repo, pr); until a PR has been seen twice its commits-since
 state is unknown and it stays in `needs_review`/`reviewed` by review presence.
 
+## Interactive review workspace (`/api/v1/reviews/pr`)
+
+One PR = one review workspace: the PR diff rendered with inline comment threads,
+LLM-assisted drafting, and batch submit — all via `gh` (no stored tokens).
+
+| Method & path | Body | Returns |
+|---|---|---|
+| `GET  /reviews/pr?dir=&pr=` | — | `PRReview` |
+| `GET  /reviews/pr/drafts?dir=&pr=` | — | `{drafts: [DraftComment]}` |
+| `POST /reviews/pr/drafts` | `{dir, pr, path, line, side, body}` | `DraftComment` (201) |
+| `DELETE /reviews/pr/drafts/{id}` | — | 204 |
+| `POST /reviews/pr/ai-draft` | `{dir, pr, kind: comment\|reply, path?, line?, thread_id?, instruction?}` | `{text}` |
+| `POST /reviews/pr/submit` | `{dir, pr, event: APPROVE\|REQUEST_CHANGES\|COMMENT, body, draft_ids: []}` | `{url}` |
+| `POST /reviews/pr/reply` | `{dir, pr, thread_id, body, resolve}` | 204 |
+
+```jsonc
+// PRReview
+{
+  "number": 12540, "title": "…", "author": "…", "url": "…",
+  "state": "OPEN", "head_sha": "…", "base_ref": "master",
+  "checks": "passing|failing|pending|none", "review_decision": "…",
+  "body": "…",                                   // PR description (markdown)
+  "files": [{
+    "path": "src/…", "old_path": "…", "status": "modified|added|removed|renamed",
+    "additions": 0, "deletions": 0, "binary": false,
+    "hunks": [{ "header": "@@ … @@",
+      "lines": [{ "op": " |+|-", "old_line": 0, "new_line": 0, "text": "…" }] }]
+  }],
+  "threads": [{
+    "id": "PRRT_…", "path": "src/…", "line": 42, "side": "RIGHT|LEFT",
+    "is_resolved": false, "diff_hunk": "…",
+    "comments": [{ "id": "…", "author": "…", "body": "…", "created_at": "…", "is_mine": false }]
+  }]
+}
+// DraftComment — a pending review comment held in grove until submit.
+{ "id": "…", "dir": "…", "pr": 12540, "path": "src/…", "line": 42, "side": "RIGHT", "body": "…", "created_at": "…" }
+```
+
+`ai-draft` runs a headless claude in the repo work dir with the diff (and the
+target line's hunk or the thread's context) and returns editable suggested
+text — the human always reviews/edits before it becomes a draft or reply.
+`submit` posts one batch review via `gh api …/pulls/{n}/reviews` (event + body
++ the referenced drafts as `comments[]`, anchors pre-validated) and clears
+those drafts. `reply` posts to an existing thread (GraphQL
+`addPullRequestReviewThreadReply`, `resolveReviewThread` when `resolve`).
+Drafts persist in a `review_drafts` table keyed by (dir, pr).
+
 ## WebSocket `/ws/state` (JSON text frames, server-push)
 
 - On connect the server always sends

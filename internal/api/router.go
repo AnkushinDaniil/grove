@@ -68,6 +68,11 @@ type Handlers struct {
 	commit  string
 	home    func() (string, error)
 	github  GitHubClient
+
+	// aiDrafter runs a headless claude to draft PR review text (POST
+	// /reviews/pr/ai-draft). A nil value falls back to the real claude exec
+	// (defaultAIDrafter); tests override it to avoid shelling out.
+	aiDrafter aiDraftFunc
 }
 
 // New builds Handlers from cfg.
@@ -124,6 +129,14 @@ func (h *Handlers) Routes() http.Handler {
 	mux.HandleFunc("GET /api/v1/reviews/sources", h.handleReviewSources)
 	mux.HandleFunc("POST /api/v1/reviews/sources", h.handleSetReviewSources)
 	mux.HandleFunc("POST /api/v1/reviews/start", h.handleReviewStart)
+
+	mux.HandleFunc("GET /api/v1/reviews/pr", h.handlePRReview)
+	mux.HandleFunc("GET /api/v1/reviews/pr/drafts", h.handleListDrafts)
+	mux.HandleFunc("POST /api/v1/reviews/pr/drafts", h.handleCreateDraft)
+	mux.HandleFunc("DELETE /api/v1/reviews/pr/drafts/{id}", h.handleDeleteDraft)
+	mux.HandleFunc("POST /api/v1/reviews/pr/ai-draft", h.handleAIDraft)
+	mux.HandleFunc("POST /api/v1/reviews/pr/submit", h.handleSubmitReview)
+	mux.HandleFunc("POST /api/v1/reviews/pr/reply", h.handleReplyThread)
 
 	mux.HandleFunc("POST "+PathAuthSession, h.handleAuthSession)
 	mux.HandleFunc("GET "+PathAuthMe, h.handleAuthMe)
