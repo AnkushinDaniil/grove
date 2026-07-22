@@ -4,6 +4,7 @@ import { apiClient } from "./state/api";
 import { extractHashToken, stripHashToken } from "./state/auth";
 import { startStateSocket } from "./state/stateSocketBootstrap";
 import { startUsagePolling } from "./state/usagePolling";
+import { startReviewsPolling } from "./state/reviewsPolling";
 
 type AuthPhase = "checking" | "authed" | "unauthorized" | "error";
 
@@ -23,6 +24,7 @@ export function AuthGate({ children }: AuthGateProps) {
     if (import.meta.env.VITE_MOCK === "1") {
       void startStateSocket();
       startUsagePolling();
+      startReviewsPolling();
       return;
     }
 
@@ -37,6 +39,7 @@ export function AuthGate({ children }: AuthGateProps) {
           setPhase("authed");
           void startStateSocket();
           startUsagePolling();
+          startReviewsPolling();
           return;
         }
         const ok = await apiClient.authMe();
@@ -45,6 +48,7 @@ export function AuthGate({ children }: AuthGateProps) {
         if (ok) {
           void startStateSocket();
           startUsagePolling();
+          startReviewsPolling();
         }
       } catch {
         if (!cancelled) setPhase("error");

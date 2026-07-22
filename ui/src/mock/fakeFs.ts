@@ -18,6 +18,7 @@ const DIRS: readonly string[] = [
   "/Users/daniil/code/grove/cmd",
   "/Users/daniil/code/grove/internal",
   "/Users/daniil/code/grove/ui",
+  "/Users/daniil/code/nethermind",
   "/Users/daniil/code/orchard",
   "/Users/daniil/code/website",
   "/Users/daniil/docs",

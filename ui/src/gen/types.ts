@@ -245,6 +245,59 @@ export interface DirSuggestions {
   home: string;
 }
 
+// --- Review Radar (/api/v1/reviews) ---
+
+export type ReviewChecksState = "passing" | "failing" | "pending" | "none";
+
+// "" = no review decision yet (e.g. a fresh draft with no reviewers).
+export type ReviewDecision = "REVIEW_REQUIRED" | "APPROVED" | "CHANGES_REQUESTED" | "";
+
+export interface PR {
+  number: number;
+  title: string;
+  author: string;
+  url: string;
+  is_draft: boolean;
+  updated_at: string;
+  review_decision: ReviewDecision;
+  checks: ReviewChecksState;
+  additions: number;
+  deletions: number;
+}
+
+// A PR appears in exactly one bucket -- first match wins, in this order
+// (see API.md's Review Radar section for the classification rules).
+export interface ReviewBuckets {
+  needs_review: PR[];
+  re_review: PR[];
+  reviewed: PR[];
+  mine: PR[];
+}
+
+export interface ReviewRepo {
+  dir: string;
+  name_with_owner: string;
+  buckets: ReviewBuckets;
+}
+
+export interface ReviewsResponse {
+  login: string;
+  repos: ReviewRepo[];
+  errors: string[];
+}
+
+// GET /reviews/sources response and POST /reviews/sources request share this
+// shape -- the endpoint always replaces the full watched-directory set.
+export interface ReviewSources {
+  dirs: string[];
+}
+
+export interface StartReviewRequest {
+  dir: string;
+  pr: number;
+  title?: string;
+}
+
 export interface AuthSessionRequest {
   token: string;
 }

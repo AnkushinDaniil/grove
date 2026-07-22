@@ -12,6 +12,7 @@ import { world } from "./world";
 import { startMockSessionLifecycle } from "./scenarios";
 import { buildFixtureUsage } from "./fixtures";
 import { suggestDirsMock } from "./fakeFs";
+import { reviewWorld } from "./reviewWorld";
 
 function nowISO(): string {
   return new Date().toISOString();
@@ -188,6 +189,48 @@ export async function createMockApiClient(): Promise<ApiClient> {
 
     async authMe() {
       return true;
+    },
+
+    async getReviews() {
+      return reviewWorld.reviews();
+    },
+
+    async getReviewSources() {
+      return { dirs: reviewWorld.dirs };
+    },
+
+    async setReviewSources(dirs) {
+      return { dirs: reviewWorld.setDirs(dirs) };
+    },
+
+    async startReview(dir, prNumber, title) {
+      const root = [...world.nodesById.values()].find((n) => n.kind === "workspace" && !n.archived_at);
+      if (!root) throw new ApiError(404, "no workspace to attach a review to");
+      const repoName = reviewWorld.getRepoName(dir) ?? dir;
+      const foundPR = reviewWorld.findPR(dir, prNumber);
+      const now = nowISO();
+      const id = world.nextId("node");
+      const created: Node = {
+        id,
+        parent_id: root.id,
+        kind: "task",
+        title: title ?? `Review ${repoName}#${prNumber}`,
+        brief: `Read-only review of ${repoName}#${prNumber}${foundPR ? `: ${foundPR.title}` : ""}. Leave review comments on GitHub; do not push changes to the branch.`,
+        status: "idle",
+        attention: "none",
+        attention_reason: "",
+        driver: "",
+        profile_id: "",
+        current_session_id: "",
+        workspace_dir: "",
+        work_dir: dir,
+        meta: {},
+        position: world.childrenOf(root.id).length,
+        created_at: now,
+        updated_at: now,
+      };
+      world.publish({ nodes: [created] });
+      return created;
     },
   };
 }

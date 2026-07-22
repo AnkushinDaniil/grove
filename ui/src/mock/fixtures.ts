@@ -17,14 +17,16 @@ import type { Event, EventID, Node, NodeID, Session, UsageWindow, UsageWindowKin
  * exist yet either.
  */
 
-function ago(ms: number): string {
+// Exported for reuse by other mock fixture builders (e.g. reviewFixtures.ts)
+// that want the same "relative to load time" timestamp convention.
+export function ago(ms: number): string {
   return new Date(Date.now() - ms).toISOString();
 }
 
-const MIN = 60_000;
-const HOUR = 60 * MIN;
+export const MIN = 60_000;
+export const HOUR = 60 * MIN;
 
-const SEC = 1000;
+export const SEC = 1000;
 
 let eventSeq = 0;
 function eventId(): EventID {

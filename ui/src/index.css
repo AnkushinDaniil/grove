@@ -41,6 +41,11 @@
   --color-danger-strong: #ff6b85;
   --color-danger-soft: rgb(240 80 110 / 14%);
 
+  /* Diff stat green -- deliberately not the lime accent (reserved for
+     brand/focus/selection) and not a status hue; deletions reuse
+     status-failed directly since "removed" and "failed" read the same red. */
+  --color-diff-add: #34d399;
+
   /* Status semantics -- fixed vocabulary, never reused for chrome */
   --color-status-idle: #6b7280;
   --color-status-starting: #f5a623;
@@ -81,6 +86,8 @@
     --color-danger: #dc2626;
     --color-danger-strong: #b91c1c;
     --color-danger-soft: rgb(220 38 38 / 10%);
+
+    --color-diff-add: #059669;
 
     --color-status-idle: #6b7280;
     --color-status-starting: #c2760f;

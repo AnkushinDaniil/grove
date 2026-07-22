@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/AnkushinDaniil/grove/internal/github"
 	"github.com/AnkushinDaniil/grove/internal/session"
 	"github.com/AnkushinDaniil/grove/internal/store"
 	"github.com/AnkushinDaniil/grove/internal/tree"
@@ -47,6 +48,10 @@ type Config struct {
 	// (GET /fs/dirs). Injected as a seam so tests are independent of $HOME; nil
 	// defaults to os.UserHomeDir.
 	Home func() (string, error)
+
+	// GitHub wraps the gh CLI for the Review Radar endpoints. Nil defaults to a
+	// client over the real gh binary; tests inject one backed by a fake runner.
+	GitHub GitHubClient
 }
 
 // Handlers serves the REST contract over the domain packages.
@@ -62,6 +67,7 @@ type Handlers struct {
 	version string
 	commit  string
 	home    func() (string, error)
+	github  GitHubClient
 }
 
 // New builds Handlers from cfg.
@@ -74,6 +80,10 @@ func New(cfg Config) *Handlers {
 	if home == nil {
 		home = os.UserHomeDir
 	}
+	gh := cfg.GitHub
+	if gh == nil {
+		gh = github.New()
+	}
 	return &Handlers{
 		tree:       cfg.Tree,
 		sessions:   cfg.Sessions,
@@ -85,6 +95,7 @@ func New(cfg Config) *Handlers {
 		version:    cfg.Version,
 		commit:     cfg.Commit,
 		home:       home,
+		github:     gh,
 	}
 }
 
@@ -107,6 +118,11 @@ func (h *Handlers) Routes() http.Handler {
 	mux.HandleFunc("GET /api/v1/version", h.handleVersion)
 	mux.HandleFunc("GET /api/v1/usage", h.handleUsage)
 	mux.HandleFunc("GET /api/v1/stats", h.handleStats)
+
+	mux.HandleFunc("GET /api/v1/reviews", h.handleReviews)
+	mux.HandleFunc("GET /api/v1/reviews/sources", h.handleReviewSources)
+	mux.HandleFunc("POST /api/v1/reviews/sources", h.handleSetReviewSources)
+	mux.HandleFunc("POST /api/v1/reviews/start", h.handleReviewStart)
 
 	mux.HandleFunc("POST "+PathAuthSession, h.handleAuthSession)
 	mux.HandleFunc("GET "+PathAuthMe, h.handleAuthMe)

@@ -3,6 +3,7 @@ import { AppShell } from "./components/shell/AppShell";
 import { WelcomeView } from "./components/node/WelcomeView";
 import { NodeView } from "./components/node/NodeView";
 import { InboxView } from "./components/inbox/InboxView";
+import { ReviewsView } from "./components/reviews/ReviewsView";
 
 export const router = createBrowserRouter([
   {
@@ -12,6 +13,7 @@ export const router = createBrowserRouter([
       { index: true, element: <WelcomeView /> },
       { path: "n/:id", element: <NodeView /> },
       { path: "inbox", element: <InboxView /> },
+      { path: "reviews", element: <ReviewsView /> },
     ],
   },
 ]);

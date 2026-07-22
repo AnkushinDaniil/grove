@@ -2,9 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import clsx from "clsx";
 import { Link, useNavigate, useParams } from "react-router";
-import { Inbox as InboxIcon, Plus, X } from "lucide-react";
+import { GitPullRequest, Inbox as InboxIcon, Plus, X } from "lucide-react";
 import { useTreeStore } from "../../state/tree";
 import { selectInboxEvents, useInboxStore } from "../../state/inbox";
+import { selectNeedsAttentionCount, useReviewsStore } from "../../state/reviews";
 import { apiClient } from "../../state/api";
 import { loadCollapsedIds, loadRailWidth, saveCollapsedIds, saveRailWidth } from "../../state/persistLocal";
 import { flattenVisible } from "../../lib/flattenTree";
@@ -38,6 +39,7 @@ export function TreeRail({ mobileOpen, onMobileClose }: TreeRailProps) {
   const [focusedId, setFocusedId] = useState<NodeID | null>(null);
   const [creatingUnder, setCreatingUnder] = useState<NodeID | null>(null);
   const inboxCount = useInboxStore((s) => selectInboxEvents(s).length);
+  const reviewsCount = useReviewsStore(selectNeedsAttentionCount);
 
   useEffect(() => saveCollapsedIds(collapsed), [collapsed]);
   useEffect(() => saveRailWidth(width), [width]);
@@ -180,6 +182,18 @@ export function TreeRail({ mobileOpen, onMobileClose }: TreeRailProps) {
           >
             <InboxIcon size={13} />
             <AttentionBadge count={inboxCount} />
+          </Link>
+          <Link
+            to="/reviews"
+            aria-label="Reviews"
+            onClick={onMobileClose}
+            className={clsx(
+              "flex min-h-11 items-center gap-1 rounded px-1.5 hover:bg-hover hover:text-ink md:min-h-0 md:py-0.5",
+              FOCUS_RING,
+            )}
+          >
+            <GitPullRequest size={13} />
+            <AttentionBadge count={reviewsCount} />
           </Link>
           <button
             type="button"

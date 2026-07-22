@@ -168,6 +168,52 @@ resolved_at, fix_node_id}`. The UI offers "Create fix task" on any open feedback
 it spawns a task node briefed with the feedback context (and, for kind=skill, the
 skill name/path), then links it via `fix_node_id` — closing the loop inside the tree.
 
+## Review Radar (`/api/v1/reviews`)
+
+A standing queue of open GitHub PRs across watched repositories, classified by
+what they need from the user. All GitHub access is via the `gh` CLI (the daemon
+stores no tokens; auth is the user's existing `gh` login). Watched repos are
+directories stored in the `review_dirs` setting, auto-seeded from distinct node
+`work_dir` values on first read.
+
+| Method & path | Body | Returns |
+|---|---|---|
+| `GET  /reviews` | — | `{login, repos: [ReviewRepo], errors: [string]}` |
+| `GET  /reviews/sources` | — | `{dirs: [string]}` |
+| `POST /reviews/sources` | `{dirs: [string]}` | `{dirs: [string]}` (absolute existing git dirs; else 400) |
+| `POST /reviews/start` | `{dir, pr, title?}` | `Node` (201) — spawns a review task node |
+
+```jsonc
+// ReviewRepo — one watched repository's classified PRs.
+{
+  "dir": "/Users/…/nethermind",
+  "name_with_owner": "NethermindEth/nethermind",
+  "buckets": {
+    // Each is a list of PR objects. A PR appears in exactly one bucket,
+    // first match wins in this order:
+    "needs_review":   [PR],  // open, not draft, not mine, no review from me (or review requested from me)
+    "re_review":      [PR],  // I reviewed, but new commits landed since (head oid changed)
+    "reviewed":       [PR],  // I already reviewed; kept for revisiting
+    "mine":           [PR]   // authored by me, open
+  }
+}
+// PR
+{
+  "number": 12540, "title": "…", "author": "kamilchodola", "url": "https://github.com/…/pull/12540",
+  "is_draft": false, "updated_at": "2026-07-22T09:01:12Z",
+  "review_decision": "REVIEW_REQUIRED|APPROVED|CHANGES_REQUESTED|",
+  "checks": "passing|failing|pending|none",
+  "additions": 0, "deletions": 0
+}
+```
+
+`POST /reviews/start` spawns a **task** node under the workspace root (title
+`Review <owner/repo>#<pr>`), with the repo dir as its `work_dir` and a brief
+instructing a read-only review of that PR — it then runs like any other node
+(the user starts a session on it). Re-review detection uses head-oid state
+persisted per (repo, pr); until a PR has been seen twice its commits-since
+state is unknown and it stays in `needs_review`/`reviewed` by review presence.
+
 ## WebSocket `/ws/state` (JSON text frames, server-push)
 
 - On connect the server always sends

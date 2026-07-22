@@ -7,7 +7,10 @@ import type {
   Node,
   PatchNodeRequest,
   PromptRequest,
+  ReviewSources,
+  ReviewsResponse,
   Session,
+  StartReviewRequest,
   TreeSnapshot,
   UsageResponse,
   UsageWindowKind,
@@ -45,6 +48,13 @@ export interface ApiClient {
   authSession(token: string): Promise<void>;
   /** Resolves true if a valid session cookie is already present. */
   authMe(): Promise<boolean>;
+  /** Review Radar: open PRs across watched repos, classified into buckets. */
+  getReviews(): Promise<ReviewsResponse>;
+  getReviewSources(): Promise<ReviewSources>;
+  /** Replaces the full watched-directory set (not a merge/append). */
+  setReviewSources(dirs: string[]): Promise<ReviewSources>;
+  /** Spawns a read-only review task node for a PR; the caller navigates to it. */
+  startReview(dir: string, pr: number, title?: string): Promise<Node>;
 }
 
 function isErrorBody(v: unknown): v is { error: string } {
@@ -137,6 +147,19 @@ export const realApiClient: ApiClient = {
       throw err;
     }
   },
+
+  getReviews: () => request("/reviews"),
+
+  getReviewSources: () => request("/reviews/sources"),
+
+  setReviewSources: (dirs) =>
+    request("/reviews/sources", { method: "POST", body: JSON.stringify({ dirs } satisfies ReviewSources) }),
+
+  startReview: (dir, pr, title) =>
+    request("/reviews/start", {
+      method: "POST",
+      body: JSON.stringify({ dir, pr, title } satisfies StartReviewRequest),
+    }),
 };
 
 // Mock mode swaps in an in-memory client. The dynamic import keeps src/mock/
