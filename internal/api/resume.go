@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 
@@ -20,31 +21,71 @@ import (
 // that id again just reproduces "No conversation found" forever. Grounding
 // the id in an existing transcript breaks the poison loop.
 func (h *Handlers) resolveResumeID(ctx context.Context, nodeID core.NodeID, requested string) (string, error) {
+	id, ok := h.resumableTarget(ctx, nodeID, requested)
+	if !ok {
+		return "", fmt.Errorf(
+			"conversation %s not found and no earlier resumable conversation exists for this node — start a new session",
+			requested,
+		)
+	}
+	return id, nil
+}
+
+// resumableTarget returns the best conversation id to resume for a node: the
+// preferred id if its transcript has real content, else the node's most recent
+// earlier session whose conversation still exists. ok is false when nothing is
+// resumable (e.g. cmux-era sessions whose conversation was never written as a
+// standard transcript). Non-claude drivers always pass the preferred id
+// through (their layout is unknown).
+func (h *Handlers) resumableTarget(ctx context.Context, nodeID core.NodeID, preferred string) (string, bool) {
 	resolved, ok := h.tree.Resolve(nodeID)
 	if !ok || resolved.Driver != "claude" {
-		// Only claude's transcript layout is known; other drivers pass through.
-		return requested, nil
+		return preferred, preferred != ""
 	}
-	if h.claudeTranscriptExists(requested) {
-		return requested, nil
+	if h.claudeTranscriptExists(preferred) {
+		return preferred, true
 	}
 	history, err := h.store.SessionsForNode(ctx, nodeID)
 	if err != nil {
-		h.logger.Warn("resume fallback: session history unavailable", "node", nodeID, "err", err)
-		return requested, nil // let the CLI report the failure rather than block
+		h.logger.Warn("resume target: session history unavailable", "node", nodeID, "err", err)
+		return preferred, preferred != "" // let the CLI report the failure rather than block
 	}
 	for _, sess := range history {
-		if sess.DriverSessionID != "" && sess.DriverSessionID != requested &&
+		if sess.DriverSessionID != "" && sess.DriverSessionID != preferred &&
 			h.claudeTranscriptExists(sess.DriverSessionID) {
-			h.logger.Info("resume fallback: replacing unknown conversation id",
-				"node", nodeID, "requested", requested, "using", sess.DriverSessionID)
-			return sess.DriverSessionID, nil
+			return sess.DriverSessionID, true
 		}
 	}
-	return "", fmt.Errorf(
-		"conversation %s not found and no earlier resumable conversation exists for this node — start a new session",
-		requested,
-	)
+	return "", false
+}
+
+// resumeTargetResponse tells the UI whether a node's latest session can be
+// resumed, and with which conversation id.
+type resumeTargetResponse struct {
+	Resumable       bool   `json:"resumable"`
+	DriverSessionID string `json:"driver_session_id"`
+	Reason          string `json:"reason"`
+}
+
+// handleResumeTarget answers whether the node's latest session is resumable,
+// so the terminal view can present an honest (enabled/disabled) Resume control
+// instead of a button that always looks active and then errors.
+func (h *Handlers) handleResumeTarget(w http.ResponseWriter, r *http.Request) {
+	nodeID := pathID(r)
+	sess, ok := h.tree.SessionFor(nodeID)
+	if !ok {
+		writeJSON(w, h.logger, http.StatusOK, resumeTargetResponse{
+			Reason: "this node has no session yet",
+		})
+		return
+	}
+	id, resumable := h.resumableTarget(r.Context(), nodeID, sess.DriverSessionID)
+	resp := resumeTargetResponse{Resumable: resumable, DriverSessionID: id}
+	if !resumable {
+		resp.Reason = "the previous conversation was not saved as a resumable transcript " +
+			"(sessions run through a third-party wrapper like cmux keep their history internally) — start a new session"
+	}
+	writeJSON(w, h.logger, http.StatusOK, resp)
 }
 
 // claudeTranscriptExists reports whether a conversation id has a persisted,

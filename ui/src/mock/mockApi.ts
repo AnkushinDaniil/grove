@@ -191,6 +191,18 @@ export async function createMockApiClient(): Promise<ApiClient> {
       return true;
     },
 
+    async resumeTarget(nodeId: string) {
+      const node = world.snapshot().nodes.find((n) => n.id === nodeId);
+      const id = node?.current_session_id
+        ? (world.snapshot().sessions.find((s) => s.id === node.current_session_id)?.driver_session_id ?? "")
+        : "";
+      return {
+        resumable: id !== "",
+        driver_session_id: id,
+        reason: id === "" ? "the previous conversation was not saved as a resumable transcript" : "",
+      };
+    },
+
     async getReviews() {
       return reviewWorld.reviews();
     },

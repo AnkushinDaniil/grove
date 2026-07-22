@@ -7,6 +7,7 @@ import type {
   Node,
   PatchNodeRequest,
   PromptRequest,
+  ResumeTarget,
   ReviewSources,
   ReviewsResponse,
   Session,
@@ -48,6 +49,8 @@ export interface ApiClient {
   authSession(token: string): Promise<void>;
   /** Resolves true if a valid session cookie is already present. */
   authMe(): Promise<boolean>;
+  /** Whether a node's latest session can be resumed, and with which id. */
+  resumeTarget(nodeId: string): Promise<ResumeTarget>;
   /** Review Radar: open PRs across watched repos, classified into buckets. */
   getReviews(): Promise<ReviewsResponse>;
   getReviewSources(): Promise<ReviewSources>;
@@ -148,6 +151,7 @@ export const realApiClient: ApiClient = {
     }
   },
 
+  resumeTarget: (nodeId) => request(`/nodes/${encodeURIComponent(nodeId)}/resume-target`),
   getReviews: () => request("/reviews"),
 
   getReviewSources: () => request("/reviews/sources"),

@@ -286,6 +286,14 @@ export interface ReviewsResponse {
   errors: string[];
 }
 
+// GET /nodes/{id}/resume-target: whether the node's latest session can be
+// resumed (its conversation transcript still exists), and with which id.
+export interface ResumeTarget {
+  resumable: boolean;
+  driver_session_id: string;
+  reason: string;
+}
+
 // GET /reviews/sources response and POST /reviews/sources request share this
 // shape -- the endpoint always replaces the full watched-directory set.
 export interface ReviewSources {

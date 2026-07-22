@@ -1,7 +1,8 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { RotateCcw, Terminal as TerminalIcon } from "lucide-react";
 import { EmptyState } from "../../common/EmptyState";
 import { PromptInputBar } from "../PromptInputBar";
+import { apiClient } from "../../../state/api";
 import type { Node, Session } from "../../../gen/types";
 
 // xterm + its addons are a meaningful chunk of the bundle and are only ever
@@ -82,7 +83,51 @@ export function TerminalTab({ node, latestSession, activeSession, onStartPty, on
   // replay for finished sessions) and offer resume — the CLI conversation
   // survives grove restarts and can continue in a fresh PTY.
   const endedLabel = ENDED_LABEL[latestSession.status] ?? latestSession.status;
-  const canResume = latestSession.driver_session_id !== "";
+  return (
+    <EndedSession
+      node={node}
+      latestSession={latestSession}
+      endedLabel={endedLabel}
+      onStartPty={onStartPty}
+      onResume={onResume}
+    />
+  );
+}
+
+interface EndedSessionProps {
+  node: Node;
+  latestSession: Session;
+  endedLabel: string;
+  onStartPty: () => void;
+  onResume: (driverSessionId: string) => void;
+}
+
+// EndedSession asks the daemon whether this node actually has a resumable
+// conversation on disk, so the Resume control reflects reality instead of
+// looking active and then erroring. cmux-era sessions kept their conversation
+// internally and cannot be resumed by claude --resume.
+function EndedSession({ node, latestSession, endedLabel, onStartPty, onResume }: EndedSessionProps) {
+  const [resumable, setResumable] = useState<boolean | null>(null);
+  const [resumeId, setResumeId] = useState<string>(latestSession.driver_session_id);
+  const [reason, setReason] = useState<string>("");
+
+  useEffect(() => {
+    let live = true;
+    void apiClient
+      .resumeTarget(node.id)
+      .then((t) => {
+        if (!live) return;
+        setResumable(t.resumable);
+        setResumeId(t.driver_session_id);
+        setReason(t.reason);
+      })
+      .catch(() => live && setResumable(false));
+    return () => {
+      live = false;
+    };
+  }, [node.id, latestSession.id]);
+
+  const canResume = resumable === true && resumeId !== "";
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border bg-raised px-3 py-2 text-xs text-ink-muted">
@@ -92,12 +137,14 @@ export function TerminalTab({ node, latestSession, activeSession, onStartPty, on
         </span>
         <button
           type="button"
-          onClick={() => onResume(latestSession.driver_session_id)}
+          onClick={() => onResume(resumeId)}
           disabled={!canResume}
           title={
-            canResume
-              ? "Start a new terminal continuing this conversation"
-              : "This session predates hook wiring, so its conversation id is unknown — run the CLI's own --continue in the working directory instead"
+            resumable === null
+              ? "Checking whether this conversation can be resumed…"
+              : canResume
+                ? "Start a new terminal continuing this conversation"
+                : reason || "This conversation cannot be resumed — start a new session"
           }
           className="inline-flex items-center gap-1.5 rounded-md bg-accent px-2.5 py-1 text-xs font-medium text-accent-ink hover:bg-accent-strong disabled:pointer-events-none disabled:opacity-40"
         >

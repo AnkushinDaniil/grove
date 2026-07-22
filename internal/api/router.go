@@ -113,6 +113,7 @@ func (h *Handlers) Routes() http.Handler {
 	mux.HandleFunc("POST /api/v1/nodes/{id}/prompt", h.handlePrompt)
 	mux.HandleFunc("POST /api/v1/sessions/{id}/stop", h.handleStopSession)
 	mux.HandleFunc("GET /api/v1/nodes/{id}/events", h.handleListEvents)
+	mux.HandleFunc("GET /api/v1/nodes/{id}/resume-target", h.handleResumeTarget)
 	mux.HandleFunc("GET /api/v1/inbox", h.handleInbox)
 	mux.HandleFunc("GET /api/v1/fs/dirs", h.handleFsDirs)
 	mux.HandleFunc("GET /api/v1/version", h.handleVersion)
