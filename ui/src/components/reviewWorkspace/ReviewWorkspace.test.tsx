@@ -87,6 +87,30 @@ describe("ReviewWorkspace (mock mode)", () => {
     expect(await screen.findByText("No drafts yet")).toBeInTheDocument();
   });
 
+  it("Review with AI lists findings; accept turns one into a draft, dismiss drops another", async () => {
+    renderWorkspace();
+    await screen.findByText("src/Nethermind/Nethermind.TxPool/TxPool.cs");
+
+    // Run the pass from the AI findings panel.
+    fireEvent.click(screen.getByRole("button", { name: /review with ai/i }));
+
+    // The mock returns three findings; assert one body and a suggestion block.
+    await screen.findByText(/the pool leaks the entry/i);
+    const acceptButtons = () => screen.queryAllByRole("button", { name: /^accept$/i });
+    expect(acceptButtons()).toHaveLength(3);
+    expect(screen.getAllByText("Suggested change").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("No drafts yet")).toBeInTheDocument();
+
+    // Accept the first finding -> it leaves the panel and becomes a draft.
+    fireEvent.click(acceptButtons()[0]);
+    await waitFor(() => expect(acceptButtons()).toHaveLength(2));
+    expect(screen.queryByText("No drafts yet")).not.toBeInTheDocument();
+
+    // Dismiss the next finding -> removed from the panel, no draft created.
+    fireEvent.click(screen.getAllByRole("button", { name: /dismiss/i })[0]);
+    await waitFor(() => expect(acceptButtons()).toHaveLength(1));
+  });
+
   it("Draft with AI fills the composer textarea with the mocked suggestion", async () => {
     renderWorkspace();
     await screen.findByText("src/Nethermind/Nethermind.TxPool/TxPool.cs");

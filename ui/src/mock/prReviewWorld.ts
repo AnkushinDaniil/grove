@@ -2,6 +2,9 @@ import type {
   AddReviewDraftRequest,
   AiDraftRequest,
   AiDraftResponse,
+  AiFinding,
+  AiReviewRequest,
+  AiReviewResponse,
   DraftComment,
   PRReview,
   ReplyToThreadRequest,
@@ -111,6 +114,42 @@ class MockPRReviewWorld {
     this.getReview(req.dir, req.pr);
     await delay(280);
     return { text: cannedSuggestion(req) };
+  }
+
+  async aiReview(req: AiReviewRequest): Promise<AiReviewResponse> {
+    const review = this.getReview(req.dir, req.pr);
+    await delay(300);
+    const files = review.files;
+    const findings: AiFinding[] = [];
+    if (files[0]) {
+      findings.push({
+        path: files[0].path,
+        line: 1,
+        side: "RIGHT",
+        severity: "issue",
+        body: "This path can return before the added transaction is removed on the error branch — the pool leaks the entry.",
+        suggestion: "",
+      });
+      findings.push({
+        path: files[0].path,
+        line: 2,
+        side: "RIGHT",
+        severity: "suggestion",
+        body: "Compare with a typed sentinel rather than a string; `errors.Is` survives wrapping.",
+        suggestion: "if (result == AcceptTxResult.AlreadyKnown)",
+      });
+    }
+    if (files[2]) {
+      findings.push({
+        path: files[2].path,
+        line: 1,
+        side: "RIGHT",
+        severity: "nit",
+        body: "Nit: this config default reads clearer as a named constant.",
+        suggestion: "",
+      });
+    }
+    return { findings };
   }
 
   submitReview(req: SubmitReviewRequest): SubmitReviewResponse {

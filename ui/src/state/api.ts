@@ -3,6 +3,8 @@ import type {
   AddWorktreeCommentRequest,
   AiDraftRequest,
   AiDraftResponse,
+  AiReviewRequest,
+  AiReviewResponse,
   ArchiveResponse,
   CreateFeedbackRequest,
   CreateNodeRequest,
@@ -102,6 +104,10 @@ export interface ApiClient {
    *  comment or reply text; always human-reviewed/edited before it becomes
    *  a draft or a posted reply. */
   aiDraft(req: AiDraftRequest): Promise<AiDraftResponse>;
+  /** Runs a headless claude pass over the whole PR diff and returns
+   *  line-anchored findings (proposed comments, some with a code suggestion).
+   *  Nothing is posted; the reviewer accepts/dismisses each finding. */
+  aiReview(req: AiReviewRequest): Promise<AiReviewResponse>;
   /** Posts one batch review (event + body + the referenced drafts) and
    *  clears those drafts. */
   submitReview(req: SubmitReviewRequest): Promise<SubmitReviewResponse>;
@@ -285,6 +291,8 @@ export const realApiClient: ApiClient = {
     request(`/reviews/pr/drafts/${encodeURIComponent(id)}`, { method: "DELETE" }),
 
   aiDraft: (req) => request("/reviews/pr/ai-draft", { method: "POST", body: JSON.stringify(req) }),
+
+  aiReview: (req) => request("/reviews/pr/ai-review", { method: "POST", body: JSON.stringify(req) }),
 
   submitReview: (req) => request("/reviews/pr/submit", { method: "POST", body: JSON.stringify(req) }),
 

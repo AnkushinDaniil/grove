@@ -226,6 +226,7 @@ LLM-assisted drafting, and batch submit — all via `gh` (no stored tokens).
 | `POST /reviews/pr/drafts` | `{dir, pr, path, line, side, body}` | `DraftComment` (201) |
 | `DELETE /reviews/pr/drafts/{id}` | — | 204 |
 | `POST /reviews/pr/ai-draft` | `{dir, pr, kind: comment\|reply, path?, line?, thread_id?, instruction?}` | `{text}` |
+| `POST /reviews/pr/ai-review` | `{dir, pr}` | `{findings: [AiFinding]}` |
 | `POST /reviews/pr/submit` | `{dir, pr, event: APPROVE\|REQUEST_CHANGES\|COMMENT, body, draft_ids: []}` | `{url}` |
 | `POST /reviews/pr/reply` | `{dir, pr, thread_id, body, resolve}` | 204 |
 
@@ -250,13 +251,26 @@ LLM-assisted drafting, and batch submit — all via `gh` (no stored tokens).
 }
 // DraftComment — a pending review comment held in grove until submit.
 { "id": "…", "dir": "…", "pr": 12540, "path": "src/…", "line": 42, "side": "RIGHT", "body": "…", "created_at": "…" }
+// AiFinding — one proposed review comment from an ai-review pass. Transient
+// (never persisted); the UI turns each accepted finding into a DraftComment.
+{ "path": "src/…", "line": 42, "side": "RIGHT",
+  "severity": "issue|suggestion|nit", "body": "…",
+  "suggestion": "replacement line, or \"\" for a comment-only finding" }
 ```
 
 `ai-draft` runs a headless claude in the repo work dir with the diff (and the
 target line's hunk or the thread's context) and returns editable suggested
 text — the human always reviews/edits before it becomes a draft or reply.
-`submit` posts one batch review via `gh api …/pulls/{n}/reviews` (event + body
-+ the referenced drafts as `comments[]`, anchors pre-validated) and clears
+`ai-review` runs one headless claude pass over the **whole** PR diff and returns
+structured, line-anchored `findings` (proposed comments, some carrying a code
+`suggestion`). Findings are validated to anchor to a real changed line (the
+model's hallucinated paths/lines are dropped) and never auto-post: the reviewer
+accepts each into the drafts batch (a non-empty `suggestion` is serialized into
+the draft body as a GitHub ```` ```suggestion ```` block, so `submit` posts it as
+a committable change) or dismisses it. PR-only — worktree review has no
+server-side hunks to anchor against, so its per-line `ai-draft` stays the path
+there. `submit` posts one batch review via `gh api …/pulls/{n}/reviews` (event +
+body + the referenced drafts as `comments[]`, anchors pre-validated) and clears
 those drafts. `reply` posts to an existing thread (GraphQL
 `addPullRequestReviewThreadReply`, `resolveReviewThread` when `resolve`).
 Drafts persist in a `review_drafts` table keyed by (dir, pr).

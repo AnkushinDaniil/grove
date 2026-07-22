@@ -1,12 +1,26 @@
 import { create } from "zustand";
 import { apiClient } from "./api";
-import type { DraftComment, PRReview } from "../gen/types";
+import type { AiFinding, DraftComment, PRReview } from "../gen/types";
+
+/** An AI-review finding held client-side. Findings are never persisted, so a
+ *  local id keys the list and drives dismiss; the AiFinding fields are the
+ *  server's proposal (the card may edit body/suggestion before accepting). */
+export interface LocalFinding extends AiFinding {
+  id: string;
+}
 
 interface ReviewWorkspaceState {
   dir: string | null;
   pr: number | null;
   review: PRReview | null;
   drafts: DraftComment[];
+  /** Proposals from the last "Review with AI" pass, awaiting accept/dismiss. */
+  aiFindings: LocalFinding[];
+  aiReviewing: boolean;
+  aiReviewError: string | null;
+  /** True once a pass has completed for the current PR, so the panel can tell
+   *  "clean, nothing found" from "not run yet". */
+  aiReviewRan: boolean;
   loading: boolean;
   /** True once the load for the current (dir, pr) has settled (success or
    *  error) -- distinguishes "still loading" from "loaded, PR not found". */
@@ -19,6 +33,10 @@ interface ReviewWorkspaceState {
   setReview: (review: PRReview) => void;
   addDraftLocal: (draft: DraftComment) => void;
   removeDraftLocal: (id: string) => void;
+  setAiFindings: (findings: LocalFinding[]) => void;
+  removeFinding: (id: string) => void;
+  setAiReviewing: (v: boolean) => void;
+  setAiReviewError: (message: string | null) => void;
   reset: () => void;
 }
 
@@ -27,6 +45,10 @@ const initial = {
   pr: null as number | null,
   review: null as PRReview | null,
   drafts: [] as DraftComment[],
+  aiFindings: [] as LocalFinding[],
+  aiReviewing: false,
+  aiReviewError: null as string | null,
+  aiReviewRan: false,
   loading: false,
   loaded: false,
   error: null as string | null,
@@ -41,9 +63,38 @@ export const useReviewWorkspaceStore = create<ReviewWorkspaceState>((set) => ({
   setReview: (review) => set({ review }),
   addDraftLocal: (draft) => set((s) => ({ drafts: [...s.drafts, draft] })),
   removeDraftLocal: (id) => set((s) => ({ drafts: s.drafts.filter((d) => d.id !== id) })),
+  setAiFindings: (findings) => set({ aiFindings: findings, aiReviewError: null, aiReviewRan: true }),
+  removeFinding: (id) => set((s) => ({ aiFindings: s.aiFindings.filter((f) => f.id !== id) })),
+  setAiReviewing: (v) => set({ aiReviewing: v }),
+  setAiReviewError: (message) => set({ aiReviewError: message }),
 
   reset: () => set({ ...initial }),
 }));
+
+// Monotonic id source for client-only findings -- unique within and across
+// passes (a new pass replaces the whole set), and deterministic for tests.
+let findingSeq = 0;
+function nextFindingId(): string {
+  findingSeq += 1;
+  return `finding-${findingSeq}`;
+}
+
+/** Runs one "Review with AI" pass and populates the findings panel. Kept
+ *  separate from the store like loadReviewWorkspace so the async lifecycle
+ *  (busy flag, error) lives in one place. */
+export async function runAIReview(dir: string, pr: number): Promise<void> {
+  const store = useReviewWorkspaceStore.getState();
+  store.setAiReviewing(true);
+  store.setAiReviewError(null);
+  try {
+    const { findings } = await apiClient.aiReview({ dir, pr });
+    useReviewWorkspaceStore.getState().setAiFindings(findings.map((f) => ({ ...f, id: nextFindingId() })));
+  } catch (err) {
+    useReviewWorkspaceStore.getState().setAiReviewError(err instanceof Error ? err.message : String(err));
+  } finally {
+    useReviewWorkspaceStore.getState().setAiReviewing(false);
+  }
+}
 
 /** Loads a PR's review + its pending drafts together. ReviewWorkspace calls
  *  this once per (dir, pr) route param change; SubmitBar calls it again

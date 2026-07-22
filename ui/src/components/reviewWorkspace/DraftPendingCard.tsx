@@ -3,6 +3,7 @@ import clsx from "clsx";
 import { X } from "lucide-react";
 import { apiClient } from "../../state/api";
 import { useReviewWorkspaceStore } from "../../state/reviewWorkspace";
+import { splitSuggestion } from "../../lib/suggestion";
 import { FOCUS_RING } from "../../lib/constants";
 import type { DraftComment } from "../../gen/types";
 
@@ -19,6 +20,9 @@ interface DraftPendingCardProps {
 export function DraftPendingCard({ draft, showLocation }: DraftPendingCardProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // A draft body may carry a committable GitHub ```suggestion block (e.g. from
+  // an accepted AI finding); render the prose and the suggested code distinctly.
+  const { text, suggestion } = splitSuggestion(draft.body);
 
   async function remove() {
     setBusy(true);
@@ -44,7 +48,15 @@ export function DraftPendingCard({ draft, showLocation }: DraftPendingCardProps)
               </span>
             )}
           </div>
-          <p className="mt-1 line-clamp-3 whitespace-pre-wrap font-sans text-xs text-ink-muted">{draft.body}</p>
+          {text !== "" && (
+            <p className="mt-1 line-clamp-3 whitespace-pre-wrap font-sans text-xs text-ink-muted">{text}</p>
+          )}
+          {suggestion.trim() !== "" && (
+            <div className="mt-1.5 overflow-x-auto rounded border border-diff-add/30 bg-diff-add/10">
+              <div className="border-b border-diff-add/20 px-2 py-0.5 text-2xs font-medium text-diff-add">Suggested change</div>
+              <pre className="px-2 py-1 font-mono text-2xs whitespace-pre text-ink">{suggestion}</pre>
+            </div>
+          )}
         </div>
         <button
           type="button"

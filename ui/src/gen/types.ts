@@ -441,6 +441,33 @@ export interface AiDraftResponse {
   text: string;
 }
 
+// --- AI review pass (/api/v1/reviews/pr/ai-review) ---
+
+export type AiFindingSeverity = "issue" | "suggestion" | "nit";
+
+// One AI-proposed review comment anchored to a changed line, optionally with a
+// single-line code suggestion. Findings are transient (never persisted): the UI
+// holds one pass's set and turns each accepted finding into a normal draft, its
+// `suggestion` becoming a GitHub ```suggestion block in the draft body.
+export interface AiFinding {
+  path: string;
+  line: number;
+  side: ReviewCommentSide;
+  severity: AiFindingSeverity;
+  body: string;
+  /** Replacement text for the anchored line; "" when the finding is comment-only. */
+  suggestion: string;
+}
+
+export interface AiReviewRequest {
+  dir: string;
+  pr: number;
+}
+
+export interface AiReviewResponse {
+  findings: AiFinding[];
+}
+
 export type SubmitReviewEvent = "APPROVE" | "REQUEST_CHANGES" | "COMMENT";
 
 export interface SubmitReviewRequest {

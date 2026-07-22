@@ -8,6 +8,7 @@ import { ThreadCard } from "./ThreadCard";
 import { DraftPendingCard } from "./DraftPendingCard";
 import { CommentComposer } from "./CommentComposer";
 import { DraftsRail } from "./DraftsRail";
+import { AiFindingsPanel } from "./AiFindingsPanel";
 import { SubmitBar } from "./SubmitBar";
 import type { DiffViewComment, DiffViewComposerTarget } from "../diff/types";
 
@@ -83,6 +84,21 @@ export function ReviewWorkspace() {
     })),
   ];
 
+  // Jump the diff to a finding's file. DiffView anchors each file section by
+  // the id fileDomId(viewedScopeKey, path); we reuse that convention rather
+  // than couple through a ref. The brief inline outline (not a Tailwind class,
+  // which the JIT might not have generated) confirms the landing spot.
+  function scrollToFile(path: string) {
+    const el = document.getElementById(`diff-file:pr:${dir}:${pr}:${path}`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+    el.style.transition = "box-shadow 0.15s ease";
+    el.style.boxShadow = "inset 0 0 0 2px var(--color-accent)";
+    window.setTimeout(() => {
+      el.style.boxShadow = "";
+    }, 1200);
+  }
+
   function renderComposer(target: DiffViewComposerTarget) {
     return (
       <CommentComposer
@@ -115,7 +131,10 @@ export function ReviewWorkspace() {
             />
           </Suspense>
         </div>
-        <DraftsRail drafts={drafts} />
+        <aside className="flex max-h-[60vh] shrink-0 flex-col border-t border-border bg-surface lg:max-h-none lg:w-72 lg:border-t-0 lg:border-l">
+          <AiFindingsPanel dir={dir} pr={pr} onFocus={scrollToFile} />
+          <DraftsRail drafts={drafts} />
+        </aside>
       </div>
       <SubmitBar dir={dir} pr={pr} drafts={drafts} />
     </div>

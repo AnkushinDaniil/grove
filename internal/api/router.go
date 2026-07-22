@@ -188,6 +188,7 @@ func (h *Handlers) Routes() http.Handler {
 	mux.HandleFunc("POST /api/v1/reviews/pr/drafts", h.handleCreateDraft)
 	mux.HandleFunc("DELETE /api/v1/reviews/pr/drafts/{id}", h.handleDeleteDraft)
 	mux.HandleFunc("POST /api/v1/reviews/pr/ai-draft", h.handleAIDraft)
+	mux.HandleFunc("POST /api/v1/reviews/pr/ai-review", h.handleAIReview)
 	mux.HandleFunc("POST /api/v1/reviews/pr/submit", h.handleSubmitReview)
 	mux.HandleFunc("POST /api/v1/reviews/pr/reply", h.handleReplyThread)
 
