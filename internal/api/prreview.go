@@ -22,12 +22,20 @@ import (
 // text. It is the swappable seam behind POST /reviews/pr/ai-draft.
 type aiDraftFunc func(ctx context.Context, dir, prompt string) (string, error)
 
-// aiDraftTimeout bounds one headless claude drafting call.
-const aiDraftTimeout = 120 * time.Second
+// aiDraftTimeout bounds one headless claude drafting call. Generous headroom:
+// even a fast model over a sizable diff can take a minute-plus.
+const aiDraftTimeout = 240 * time.Second
 
-// maxPromptDiffBytes caps how much diff text is embedded in an ai-draft prompt,
-// so a huge file never produces an unbounded prompt.
-const maxPromptDiffBytes = 60 * 1024
+// maxPromptDiffBytes caps how much diff text is embedded in an ai-draft prompt.
+// Kept modest on purpose: a review comment needs enough surrounding diff to be
+// grounded, not the entire PR — and a smaller prompt drafts far faster (a 60KB
+// prompt on a large model routinely blew past the old timeout).
+const maxPromptDiffBytes = 20 * 1024
+
+// aiDraftModel is the model used for drafting review text. A fast mid-tier
+// model is the right tool: drafts are short, always human-edited, and speed
+// matters for an interactive action. Overrideable via GROVE_AI_DRAFT_MODEL.
+const aiDraftModel = "sonnet"
 
 // prReviewGitHub is the gh-backed capability the interactive review workspace
 // needs beyond the Review Radar's GitHubClient. It is asserted from the injected
@@ -634,10 +642,17 @@ var claudeShimMarkers = []string{"cmux-cli-shims", "/cmux.app/"}
 // defaultAIDrafter runs the real `claude -p` in dir with a scrubbed PATH and a
 // bounded timeout, returning trimmed stdout.
 func defaultAIDrafter(ctx context.Context, dir, prompt string) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, aiDraftTimeout)
+	// Detach from the caller's request context so a brief client disconnect (a
+	// re-render, a navigation, a flaky socket) doesn't SIGKILL claude mid-draft;
+	// only our own timeout bounds it.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), aiDraftTimeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "claude", "-p", prompt, "--output-format", "text") //nolint:gosec // G204: binary is the fixed literal "claude"; prompt is an argument, not the command
+	model := aiDraftModel
+	if m := os.Getenv("GROVE_AI_DRAFT_MODEL"); m != "" {
+		model = m
+	}
+	cmd := exec.CommandContext(ctx, "claude", "-p", prompt, "--model", model, "--output-format", "text") //nolint:gosec // G204: binary is the fixed literal "claude"; prompt and model are arguments, not the command
 	cmd.Dir = dir
 	cmd.Env = scrubClaudePATH(os.Environ())
 
