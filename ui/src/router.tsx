@@ -8,11 +8,15 @@ import { ReviewWorkspace } from "./components/reviewWorkspace/ReviewWorkspace";
 import { StatsView } from "./components/stats/StatsView";
 import { ProfilesView } from "./components/profiles/ProfilesView";
 import { SettingsView } from "./components/settings/SettingsView";
+import { RouteError } from "./components/shell/RouteError";
 
 export const router = createBrowserRouter([
   {
     path: "/",
     element: <AppShell />,
+    // Catches errors from any child route -- notably a stale lazy-import after
+    // a daemon upgrade, which RouteError self-heals with a reload.
+    errorElement: <RouteError />,
     children: [
       { index: true, element: <WelcomeView /> },
       { path: "n/:id", element: <NodeView /> },
