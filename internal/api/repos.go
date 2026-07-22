@@ -124,14 +124,9 @@ func (h *Handlers) handleCreateRepo(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleDeleteRepo removes a repo by id. Deletion is idempotent: an unknown id
-// still returns 204. Task worktrees already cut from the repo are untouched.
-//
-// A repo that still has worktree rows referencing it (worktrees.repo_id is a
-// NOT NULL foreign key, and archived tasks retain their worktree rows) cannot
-// be hard-deleted while foreign_keys is on; that surfaces as a 409 rather than
-// a generic 500. This branch is defensive and forward-compatible: once the
-// store supports removing an in-use repo (e.g. a soft-delete that keeps the
-// row, or ON DELETE CASCADE), DeleteRepo succeeds and the 204 path is taken.
+// still returns 204. The store soft-deletes (the repo stops being listed and
+// its name slot is freed), so task worktrees already cut from the repo keep a
+// valid parent and are untouched.
 func (h *Handlers) handleDeleteRepo(w http.ResponseWriter, r *http.Request) {
 	id := core.RepoID(r.PathValue("id"))
 	if id == "" {
@@ -139,11 +134,6 @@ func (h *Handlers) handleDeleteRepo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.store.DeleteRepo(r.Context(), id); err != nil {
-		if isForeignKeyViolation(err) {
-			writeErrorStatus(w, h.logger, http.StatusConflict,
-				"repo still has task worktrees referencing it and cannot be removed")
-			return
-		}
 		writeError(w, h.logger, err)
 		return
 	}
@@ -181,19 +171,6 @@ func validRepoName(name string) bool {
 // the store test helper's detection so the handler maps it to 409 rather than
 // leaking a generic 500.
 func isUniqueViolation(err error) bool {
-	return isSQLiteConstraint(err, "UNIQUE")
-}
-
-// isForeignKeyViolation reports whether err is a SQLite FOREIGN KEY constraint
-// failure, which hard-deleting a repo still referenced by worktree rows raises.
-func isForeignKeyViolation(err error) bool {
-	return isSQLiteConstraint(err, "FOREIGN KEY")
-}
-
-// isSQLiteConstraint reports whether err is a *sqlite.Error whose message names
-// the given constraint kind, matching the store test helper's string-based
-// detection (the driver embeds the kind, e.g. "UNIQUE constraint failed").
-func isSQLiteConstraint(err error, kind string) bool {
 	var se *sqlite.Error
-	return errors.As(err, &se) && strings.Contains(se.Error(), kind)
+	return errors.As(err, &se) && strings.Contains(se.Error(), "UNIQUE")
 }

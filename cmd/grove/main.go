@@ -27,6 +27,7 @@ func main() {
 		{"service", "install/uninstall/status the login service (launchd/systemd)", runService},
 		{"memory", "install and check the MemPalace memory backend", runMemory},
 		{"hook", "internal: forward a CLI hook payload to the daemon", runHook},
+		{"mcp", "internal: bridge a spawned CLI's MCP calls to the daemon", runMCP},
 		{"version", "print version information", runVersion},
 	}
 	if len(os.Args) < 2 {

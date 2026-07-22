@@ -39,13 +39,17 @@ func (h *Handlers) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 	}
 	// Detach from the request: a launched session outlives the HTTP request and
 	// must not be torn down if the client disconnects.
-	sess, err := h.sessions.Start(
-		context.WithoutCancel(r.Context()),
-		id,
-		core.SessionMode(req.Mode),
-		req.Prompt,
-		req.ResumeID,
-	)
+	ctx := context.WithoutCancel(r.Context())
+	// Headless sessions run as orchestrators (grove MCP tools mounted) so any
+	// autonomous agent can drive the tree — spawn children, report, complete.
+	// Interactive PTY sessions stay plain workers the user drives by hand.
+	var sess core.Session
+	var err error
+	if core.SessionMode(req.Mode) == core.ModeHeadless && h.orchestrator != nil {
+		sess, err = h.orchestrator.LaunchOrchestrator(ctx, id, req.Prompt, req.ResumeID)
+	} else {
+		sess, err = h.sessions.Start(ctx, id, core.SessionMode(req.Mode), req.Prompt, req.ResumeID)
+	}
 	if err != nil {
 		writeError(w, h.logger, err)
 		return

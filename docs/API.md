@@ -337,10 +337,10 @@ PR-from-task work.
 `source_path` must be an absolute path to a git repository (validated: exists,
 is a git work tree). `name` defaults to the repo directory's basename; it must
 be a plain directory name (used as the worktree subdir). Adding a repo only
-affects tasks created afterward. `DELETE /repos/{id}` returns 204 for a repo
-with no provisioned worktrees, and **409** for one that tasks still depend on
-(its worktree rows reference it) — you cannot remove a repo out from under
-existing task worktrees.
+affects tasks created afterward. `DELETE /repos/{id}` is idempotent (204) and a
+**soft delete**: a repo still referenced by task worktrees is tombstoned rather
+than dropped, so those worktrees stay intact and reviewable while the repo
+disappears from the project's list (its name frees up for reuse).
 
 ## WebSocket `/ws/state` (JSON text frames, server-push)
 

@@ -5,6 +5,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -12,6 +13,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/AnkushinDaniil/grove/internal/core"
 	"github.com/AnkushinDaniil/grove/internal/gitcli"
 	"github.com/AnkushinDaniil/grove/internal/github"
 	"github.com/AnkushinDaniil/grove/internal/session"
@@ -53,17 +55,30 @@ type Config struct {
 	// GitHub wraps the gh CLI for the Review Radar endpoints. Nil defaults to a
 	// client over the real gh binary; tests inject one backed by a fake runner.
 	GitHub GitHubClient
+
+	// Orchestrator launches a node's headless session with grove's MCP tools
+	// mounted (the tree-of-agents control plane). Nil leaves headless sessions
+	// plain — they run without the grove tools.
+	Orchestrator Orchestrator
+}
+
+// Orchestrator launches a node as a root orchestrator: a headless session with
+// grove's MCP server mounted, so the agent can spawn/track children and report
+// through the tree. The scheduler propagates the mount to every child it spawns.
+type Orchestrator interface {
+	LaunchOrchestrator(ctx context.Context, nodeID core.NodeID, prompt, resumeID string) (core.Session, error)
 }
 
 // Handlers serves the REST contract over the domain packages.
 type Handlers struct {
-	tree       *tree.Tree
-	sessions   *session.Manager
-	store      *store.Store
-	worktrees  *worktree.Engine
-	auth       *Auth
-	hookTokens *HookTokens
-	logger     *slog.Logger
+	tree         *tree.Tree
+	sessions     *session.Manager
+	store        *store.Store
+	worktrees    *worktree.Engine
+	auth         *Auth
+	hookTokens   *HookTokens
+	orchestrator Orchestrator
+	logger       *slog.Logger
 
 	version string
 	commit  string
@@ -92,18 +107,19 @@ func New(cfg Config) *Handlers {
 		gh = github.New()
 	}
 	return &Handlers{
-		tree:       cfg.Tree,
-		sessions:   cfg.Sessions,
-		store:      cfg.Store,
-		worktrees:  cfg.Worktrees,
-		auth:       cfg.Auth,
-		hookTokens: cfg.HookTokens,
-		logger:     logger,
-		version:    cfg.Version,
-		commit:     cfg.Commit,
-		home:       home,
-		github:     gh,
-		git:        gitcli.NewRunner(),
+		tree:         cfg.Tree,
+		sessions:     cfg.Sessions,
+		store:        cfg.Store,
+		worktrees:    cfg.Worktrees,
+		auth:         cfg.Auth,
+		hookTokens:   cfg.HookTokens,
+		orchestrator: cfg.Orchestrator,
+		logger:       logger,
+		version:      cfg.Version,
+		commit:       cfg.Commit,
+		home:         home,
+		github:       gh,
+		git:          gitcli.NewRunner(),
 	}
 }
 

@@ -46,9 +46,20 @@ type HookWiring struct {
 	Token       string
 }
 
-// MCPRef mounts one MCP server into the agent.
+// MCPRef mounts one MCP server into the agent. A ref is either stdio-transport
+// (Command set: the driver spawns the local command and speaks MCP over its
+// stdio — grove mounts its own `grove mcp` shim this way) or HTTP-transport
+// (URL set: a streamable-HTTP endpoint with an optional bearer Token). Command
+// takes precedence when both are set.
 type MCPRef struct {
-	Name  string
+	Name string
+
+	// Stdio transport.
+	Command string            // absolute path to the server binary; empty selects HTTP
+	Args    []string          // command arguments
+	Env     map[string]string // environment for the spawned server (carries grove's node token)
+
+	// HTTP transport.
 	URL   string // streamable HTTP endpoint
 	Token string // bearer token, empty if none
 }

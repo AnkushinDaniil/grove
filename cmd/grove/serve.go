@@ -138,19 +138,38 @@ func buildServer(ctx context.Context, logger *slog.Logger, layout config.Layout,
 	} else if n > 0 {
 		logger.Info("reattached surviving sessions", "sessions", n)
 	}
+	// Start the MCP control plane + event-wake scheduler (owns the daemon's Unix
+	// socket); both loops stop when ctx is canceled. mcpTokens is the per-node
+	// token registry; the API layer will consume it to mount WithOrchestration on
+	// the root orchestrator launch in a later wave.
+	// Orchestration failure must not sink the daemon: if the MCP socket can't
+	// bind (e.g. a GROVE_HOME path longer than the OS Unix-socket limit), log it
+	// and run without the tree-of-agents control plane — headless sessions then
+	// run plain instead of as orchestrators.
+	// Keep as an interface so a failed/nil scheduler stays a nil interface
+	// (a nil *orch.Scheduler boxed in the interface would be non-nil and panic
+	// on call). A nil orchestrator makes headless sessions run plain.
+	var orchestrator api.Orchestrator
+	if scheduler, oerr := startOrchestration(ctx, logger, layout, tr, mgr); oerr != nil {
+		logger.Error("orchestration disabled", "err", oerr)
+	} else {
+		orchestrator = scheduler
+	}
+
 	engine := worktree.NewEngine(gitcli.NewRunner(), layout.Worktrees, time.Now)
 	auth := api.NewAuth(token)
 
 	apiHandlers := api.New(api.Config{
-		Tree:       tr,
-		Sessions:   mgr,
-		Store:      st,
-		Worktrees:  engine,
-		Auth:       auth,
-		HookTokens: hookTokens,
-		Logger:     logger,
-		Version:    version,
-		Commit:     commit,
+		Tree:         tr,
+		Sessions:     mgr,
+		Store:        st,
+		Worktrees:    engine,
+		Auth:         auth,
+		HookTokens:   hookTokens,
+		Orchestrator: orchestrator,
+		Logger:       logger,
+		Version:      version,
+		Commit:       commit,
 	})
 	wsHandlers := ws.New(ws.Config{
 		Tree:          tr,

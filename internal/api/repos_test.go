@@ -132,13 +132,12 @@ func TestCreateRepoRejectsNonProjectNode(t *testing.T) {
 	h.decode(h.postRepo("does-not-exist", map[string]any{"source_path": newGitRepo(t)}), http.StatusNotFound, nil)
 }
 
-// TestDeleteRepoInUseConflicts documents current behavior: a repo whose id is
-// still referenced by a task's worktree row cannot be hard-deleted while the
-// worktrees.repo_id foreign key is enforced, so the handler returns 409 instead
-// of leaking a 500. This is expected to relax to 204 once the store supports
-// removing an in-use repo (soft-delete or ON DELETE CASCADE) per the contract's
-// "removing repos ... existing task worktrees are untouched".
-func TestDeleteRepoInUseConflicts(t *testing.T) {
+// TestDeleteRepoInUseLeavesWorktree verifies the contract's "removing repos
+// only affects tasks created afterward; existing task worktrees are untouched":
+// a repo whose id is still referenced by a task's worktree row deletes cleanly
+// (204, gone from the list) via the store's soft-delete, and the worktree row
+// survives so its checkout stays reviewable.
+func TestDeleteRepoInUseLeavesWorktree(t *testing.T) {
 	h := newHarness(t, nil)
 	project := h.createNode(h.root.ID, core.KindProject, "Proj", "fake")
 
@@ -151,7 +150,19 @@ func TestDeleteRepoInUseConflicts(t *testing.T) {
 		t.Fatal("expected a provisioned worktree to reference the repo")
 	}
 
-	h.decode(h.do(http.MethodDelete, "/api/v1/repos/"+created.ID, nil), http.StatusConflict, nil)
+	h.decode(h.do(http.MethodDelete, "/api/v1/repos/"+created.ID, nil), http.StatusNoContent, nil)
+
+	// The repo no longer lists, but its worktree row is left intact.
+	if repos := h.listRepos(project.ID).Repos; len(repos) != 0 {
+		t.Fatalf("repos after delete = %+v, want none listed", repos)
+	}
+	wts, err := h.store.ListWorktrees(t.Context(), core.NodeID(task.ID))
+	if err != nil {
+		t.Fatalf("ListWorktrees: %v", err)
+	}
+	if len(wts) != 1 || wts[0].RepoID != core.RepoID(created.ID) {
+		t.Fatalf("worktrees = %+v, want one still referencing repo %s", wts, created.ID)
+	}
 }
 
 func TestDeleteRepoIsIdempotent(t *testing.T) {
