@@ -24,6 +24,7 @@ import (
 	"github.com/AnkushinDaniil/grove/internal/server"
 	"github.com/AnkushinDaniil/grove/internal/session"
 	"github.com/AnkushinDaniil/grove/internal/store"
+	"github.com/AnkushinDaniil/grove/internal/tmux"
 	"github.com/AnkushinDaniil/grove/internal/tree"
 	usageagg "github.com/AnkushinDaniil/grove/internal/usage"
 	"github.com/AnkushinDaniil/grove/internal/worktree"
@@ -124,10 +125,19 @@ func buildServer(ctx context.Context, logger *slog.Logger, layout config.Layout,
 
 	mgr := session.NewManager(reg, tr, session.Config{
 		ScrollbackDir: layout.Scrollback,
+		UseTmux:       tmux.Available(),
 		HookCommand:   hookCmd,
 		DaemonURL:     daemonURL,
 		MintHookToken: hookTokens.Mint,
 	})
+	// Revive interactive sessions whose tmux-hosted child outlived the previous
+	// daemon: MarkInterrupted flipped them to interrupted above, and Reattach
+	// flips the survivors back to running now that the tree is loaded.
+	if n, err := mgr.Reattach(ctx); err != nil {
+		logger.Warn("reattach surviving sessions", "err", err)
+	} else if n > 0 {
+		logger.Info("reattached surviving sessions", "sessions", n)
+	}
 	engine := worktree.NewEngine(gitcli.NewRunner(), layout.Worktrees, time.Now)
 	auth := api.NewAuth(token)
 

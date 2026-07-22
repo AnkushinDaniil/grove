@@ -12,11 +12,13 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/AnkushinDaniil/grove/internal/core"
 	"github.com/AnkushinDaniil/grove/internal/driver"
 	"github.com/AnkushinDaniil/grove/internal/term"
+	"github.com/AnkushinDaniil/grove/internal/tmux"
 	"github.com/AnkushinDaniil/grove/internal/tree"
 )
 
@@ -51,6 +53,13 @@ type Config struct {
 	// MintHookToken returns the per-node hook token embedded in the generated hook
 	// wiring, minted idempotently per node. Nil disables hook wiring.
 	MintHookToken func(nodeID core.NodeID) string
+
+	// UseTmux hosts interactive (ModePTY) sessions inside tmux so their child
+	// process survives a daemon restart and can be re-attached. It requires a
+	// non-empty ScrollbackDir (the exit-code file lives beside the scrollback);
+	// when false, or without a scrollback dir, PTY sessions spawn directly as
+	// before. Headless sessions are unaffected.
+	UseTmux bool
 }
 
 // LaunchOption mutates the driver LaunchSpec before the command is built. It is
@@ -63,12 +72,18 @@ type Manager struct {
 	reg  *driver.Registry
 	tree *tree.Tree
 	cfg  Config
+	tmux *tmux.Client
 
 	// baseCtx bounds every spawned process and its supervising goroutines to
 	// the manager's own lifetime, not to any single request. Shutdown cancels
 	// it as a hard-stop backstop.
 	baseCtx    context.Context
 	baseCancel context.CancelFunc
+
+	// detaching is set by Shutdown so PTY watch loops leave their tmux-hosted
+	// child running (detach) instead of finalizing and killing it. The child
+	// then survives the daemon restart, to be revived by Reattach.
+	detaching atomic.Bool
 
 	mu   sync.Mutex
 	live map[core.SessionID]*liveSession
@@ -85,14 +100,34 @@ type liveSession struct {
 	driver driver.Driver
 	caps   driver.Caps
 
-	handle *term.Handle // PTY mode
+	handle *term.Handle // PTY mode; guarded by mu (re-attach can swap it)
 	stdin  io.WriteCloser
 	proc   *os.Process
 	cancel context.CancelFunc
 
+	// tmuxName and exitFile are set only for tmux-hosted PTY sessions: the tmux
+	// session name and the file its wrapper writes the child's exit code to.
+	tmuxName string
+	exitFile string
+
 	mu   sync.Mutex
 	sess core.Session
 	done chan struct{}
+}
+
+// currentHandle returns the live PTY handle under lock; a tmux re-attach may
+// swap it out from under attach/prompt/stop callers.
+func (ls *liveSession) currentHandle() *term.Handle {
+	ls.mu.Lock()
+	defer ls.mu.Unlock()
+	return ls.handle
+}
+
+// setHandle installs a freshly-attached PTY handle after a tmux re-attach.
+func (ls *liveSession) setHandle(h *term.Handle) {
+	ls.mu.Lock()
+	defer ls.mu.Unlock()
+	ls.handle = h
 }
 
 // NewManager builds a Manager over a driver registry and tree.
@@ -103,12 +138,12 @@ func NewManager(reg *driver.Registry, tr *tree.Tree, cfg Config) *Manager {
 	if cfg.BaseEnv == nil {
 		cfg.BaseEnv = DefaultBaseEnv
 	}
-	//nolint:gosec // G118: baseCancel is retained on the Manager and invoked by Shutdown.
 	baseCtx, baseCancel := context.WithCancel(context.Background())
 	return &Manager{
 		reg:        reg,
 		tree:       tr,
 		cfg:        cfg,
+		tmux:       tmux.New(tmux.WithBaseEnv(cfg.BaseEnv)),
 		baseCtx:    baseCtx,
 		baseCancel: baseCancel,
 		live:       make(map[core.SessionID]*liveSession),
@@ -194,6 +229,9 @@ func (m *Manager) Start(
 	// canceled, so the spawn helpers use m.baseCtx internally.
 	switch mode {
 	case core.ModePTY:
+		if m.usePTYTmux() {
+			return m.startPTYTmux(sess, drv, execSpec)
+		}
 		return m.startPTY(sess, drv, execSpec)
 	case core.ModeHeadless:
 		//nolint:contextcheck // the spawned run is bound to the manager lifetime (m.baseCtx), deliberately not the request ctx.
@@ -231,7 +269,11 @@ func (m *Manager) Stop(ctx context.Context, sid core.SessionID) error {
 	}
 	switch ls.mode {
 	case core.ModePTY:
-		if err := ls.handle.Stop(ctx); err != nil {
+		if ls.tmuxName != "" {
+			if err := m.stopPTYTmux(ctx, ls); err != nil {
+				return err
+			}
+		} else if err := ls.handle.Stop(ctx); err != nil {
 			return fmt.Errorf("stop pty session: %w", err)
 		}
 	case core.ModeHeadless:
@@ -258,7 +300,7 @@ func (m *Manager) Prompt(_ context.Context, sid core.SessionID, text string) err
 	switch ls.mode {
 	case core.ModePTY:
 		seq := "\x1b[200~" + text + "\x1b[201~\r"
-		if err := ls.handle.Write([]byte(seq)); err != nil {
+		if err := ls.currentHandle().Write([]byte(seq)); err != nil {
 			return fmt.Errorf("write prompt: %w", err)
 		}
 		return nil
@@ -273,28 +315,43 @@ func (m *Manager) Prompt(_ context.Context, sid core.SessionID, text string) err
 // resize and write to it. It reports false for headless or unknown sessions.
 func (m *Manager) Terminal(sid core.SessionID) (*term.Handle, bool) {
 	ls, ok := m.get(sid)
-	if !ok || ls.handle == nil {
+	if !ok {
 		return nil, false
 	}
-	return ls.handle, true
+	h := ls.currentHandle()
+	if h == nil {
+		return nil, false
+	}
+	return h, true
 }
 
-// Shutdown stops every live session and waits for all supervising goroutines to
-// finish, or until ctx is done.
+// Shutdown winds down every live session and waits for all supervising
+// goroutines to finish, or until ctx is done. Headless and directly-spawned
+// PTY sessions are stopped (they die with the daemon); tmux-hosted PTY sessions
+// are only detached — their child keeps running in tmux, to be revived by
+// Reattach on the next start.
 func (m *Manager) Shutdown(ctx context.Context) error {
+	// Signal watch loops to leave tmux children alive before any handle exits.
+	m.detaching.Store(true)
 	// Releases baseCtx on return, hard-killing any process that outlived the
-	// graceful stop below (exec.CommandContext watches baseCtx).
+	// graceful stop below (exec.CommandContext watches baseCtx). For tmux
+	// sessions this only kills the attach client, never the detached child.
 	defer m.baseCancel()
 
 	m.mu.Lock()
-	ids := make([]core.SessionID, 0, len(m.live))
-	for id := range m.live {
-		ids = append(ids, id)
+	sessions := make([]*liveSession, 0, len(m.live))
+	for _, ls := range m.live {
+		sessions = append(sessions, ls)
 	}
 	m.mu.Unlock()
 
-	for _, id := range ids {
-		_ = m.Stop(ctx, id)
+	for _, ls := range sessions {
+		if ls.mode == core.ModePTY && ls.tmuxName != "" {
+			// Detach: stop only the attach client; the tmux child survives.
+			_ = ls.currentHandle().Stop(ctx)
+			continue
+		}
+		_ = m.Stop(ctx, ls.id)
 	}
 
 	waited := make(chan struct{})
@@ -392,6 +449,18 @@ func (m *Manager) updateSession(ctx context.Context, ls *liveSession, mutate fun
 	ls.sess = next
 	ls.mu.Unlock()
 	return nil
+}
+
+// usePTYTmux reports whether PTY sessions should be hosted in tmux. It requires
+// a scrollback dir because the exit-code file lives beside the scrollback.
+func (m *Manager) usePTYTmux() bool {
+	return m.cfg.UseTmux && m.cfg.ScrollbackDir != ""
+}
+
+// exitFilePath is where a tmux-hosted session's wrapper records the child exit
+// code, beside its scrollback.
+func (m *Manager) exitFilePath(id core.SessionID) string {
+	return filepath.Join(m.cfg.ScrollbackDir, string(id)+".exit")
 }
 
 // workingDir picks the process working directory, in priority order: the node's
