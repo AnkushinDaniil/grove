@@ -15,6 +15,7 @@ import { suggestDirsMock } from "./fakeFs";
 import { reviewWorld } from "./reviewWorld";
 import { prReviewWorld } from "./prReviewWorld";
 import { worktreeReviewWorld } from "./worktreeReviewWorld";
+import { repoWorld } from "./repoWorld";
 
 function nowISO(): string {
   return new Date().toISOString();
@@ -39,6 +40,12 @@ export async function createMockApiClient(): Promise<ApiClient> {
       const now = nowISO();
       const id = world.nextId("node");
       const siblingCount = world.childrenOf(body.parent_id).length;
+      // A task created under a project that has repos gets a provisioned
+      // worktree workspace on the real daemon; mirror that here so the Review
+      // tab lights up for demo tasks created under a repo-backed project.
+      const parent = world.nodesById.get(body.parent_id);
+      const provisioned =
+        body.kind === "task" && parent?.kind === "project" && repoWorld.hasRepos(body.parent_id);
       const created: Node = {
         id,
         parent_id: body.parent_id,
@@ -51,7 +58,7 @@ export async function createMockApiClient(): Promise<ApiClient> {
         driver: body.driver ?? "",
         profile_id: body.profile_id ?? "",
         current_session_id: "",
-        workspace_dir: "",
+        workspace_dir: provisioned ? `~/.grove/worktrees/${id}` : "",
         work_dir: body.work_dir ?? "",
         meta: {},
         position: siblingCount,
@@ -342,6 +349,18 @@ export async function createMockApiClient(): Promise<ApiClient> {
       world.publish({ nodes: [updatedNode], sessions: [session], events: [echo] });
       startMockSessionLifecycle(id, node);
       return session;
+    },
+
+    async getRepos(projectId) {
+      return { repos: repoWorld.list(projectId) };
+    },
+
+    async addRepo(projectId, body) {
+      return repoWorld.add(projectId, body);
+    },
+
+    async deleteRepo(repoId) {
+      repoWorld.remove(repoId);
     },
   };
 }

@@ -522,6 +522,33 @@ export interface AddressWorktreeRequest {
   repo: string;
 }
 
+// --- Repos (/api/v1/projects/{id}/repos) ---
+
+// A git repository registered on a project node. Once a project has repos, new
+// task nodes under it auto-provision a worktree per repo (branch
+// grove/<short8>-<slug>), which is what makes worktree review, merge-back and
+// PR-from-task work.
+export interface Repo {
+  id: string;
+  project_id: NodeID;
+  name: string;
+  source_path: string;
+  default_base: string; // "" = auto-detect origin/HEAD
+  created_at: string;
+}
+
+export interface CreateRepoRequest {
+  // Defaults to the source_path basename when omitted; must be a plain
+  // directory name (used as the worktree subdir).
+  name?: string;
+  source_path: string;
+  default_base?: string;
+}
+
+export interface ReposResponse {
+  repos: Repo[];
+}
+
 // --- WebSocket /ws/state (JSON text frames, server-push) ---
 
 export interface WSHello {

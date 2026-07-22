@@ -5,6 +5,7 @@ import type {
   AiDraftResponse,
   ArchiveResponse,
   CreateNodeRequest,
+  CreateRepoRequest,
   CreateSessionRequest,
   DirSuggestions,
   DraftComment,
@@ -15,6 +16,8 @@ import type {
   PRReview,
   PromptRequest,
   ReplyToThreadRequest,
+  Repo,
+  ReposResponse,
   ResumeTarget,
   ReviewDraftsResponse,
   ReviewSources,
@@ -101,6 +104,15 @@ export interface ApiClient {
    *  on the node so the agent fixes them -- navigate to the node's terminal
    *  to watch. */
   addressWorktree(node: string, repo: string): Promise<Session>;
+
+  // --- Repos (/api/v1/projects/{id}/repos) ---
+  /** Git repos registered on a project node. Registering one makes every task
+   *  created under the project afterwards auto-provision a worktree per repo. */
+  getRepos(projectId: string): Promise<ReposResponse>;
+  addRepo(projectId: string, body: CreateRepoRequest): Promise<Repo>;
+  /** Idempotent: removing a repo only affects tasks created afterwards;
+   *  existing task worktrees are untouched. */
+  deleteRepo(repoId: string): Promise<void>;
 }
 
 function isErrorBody(v: unknown): v is { error: string } {
@@ -239,6 +251,16 @@ export const realApiClient: ApiClient = {
 
   addressWorktree: (node, repo) =>
     request("/reviews/worktree/address", { method: "POST", body: JSON.stringify({ node, repo }) }),
+
+  getRepos: (projectId) => request(`/projects/${encodeURIComponent(projectId)}/repos`),
+
+  addRepo: (projectId, body) =>
+    request(`/projects/${encodeURIComponent(projectId)}/repos`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  deleteRepo: (repoId) => request(`/repos/${encodeURIComponent(repoId)}`, { method: "DELETE" }),
 };
 
 // Mock mode swaps in an in-memory client. The dynamic import keeps src/mock/

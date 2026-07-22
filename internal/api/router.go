@@ -141,6 +141,10 @@ func (h *Handlers) Routes() http.Handler {
 	mux.HandleFunc("POST /api/v1/reviews/pr/submit", h.handleSubmitReview)
 	mux.HandleFunc("POST /api/v1/reviews/pr/reply", h.handleReplyThread)
 
+	mux.HandleFunc("GET /api/v1/projects/{id}/repos", h.handleListRepos)
+	mux.HandleFunc("POST /api/v1/projects/{id}/repos", h.handleCreateRepo)
+	mux.HandleFunc("DELETE /api/v1/repos/{id}", h.handleDeleteRepo)
+
 	mux.HandleFunc("GET /api/v1/reviews/worktree", h.handleWorktreeReview)
 	mux.HandleFunc("GET /api/v1/reviews/worktree/comments", h.handleListWorktreeComments)
 	mux.HandleFunc("POST /api/v1/reviews/worktree/comments", h.handleCreateWorktreeComment)

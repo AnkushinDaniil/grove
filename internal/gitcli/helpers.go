@@ -52,6 +52,19 @@ func (r *Runner) BranchDelete(ctx context.Context, repo, branch string, force bo
 	return nil
 }
 
+// IsGitRepo reports whether path is inside a git work tree
+// (`git rev-parse --is-inside-work-tree` prints "true"). A non-git or
+// unreadable path makes git exit non-zero, returned here as (false, err); a
+// caller that only cares whether path is a usable repo can treat any non-nil
+// error as a definitive "no".
+func (r *Runner) IsGitRepo(ctx context.Context, path string) (bool, error) {
+	out, err := r.Run(ctx, path, "rev-parse", "--is-inside-work-tree")
+	if err != nil {
+		return false, err
+	}
+	return out == "true", nil
+}
+
 // IsDirty reports whether dir has uncommitted changes, tracked or untracked.
 func (r *Runner) IsDirty(ctx context.Context, dir string) (bool, error) {
 	out, err := r.Run(ctx, dir, "status", "--porcelain")

@@ -510,3 +510,19 @@ func TestNumStatCount(t *testing.T) {
 		}
 	}
 }
+
+func TestIsGitRepo(t *testing.T) {
+	r := NewRunner()
+
+	repo := newRepo(t)
+	if ok, err := r.IsGitRepo(context.Background(), repo); err != nil || !ok {
+		t.Fatalf("IsGitRepo(git repo) = (%v, %v), want (true, nil)", ok, err)
+	}
+
+	// A plain directory that was never `git init`ed is not a work tree; git
+	// exits non-zero, surfaced as (false, err).
+	plain := t.TempDir()
+	if ok, err := r.IsGitRepo(context.Background(), plain); ok || err == nil {
+		t.Fatalf("IsGitRepo(plain dir) = (%v, %v), want (false, non-nil)", ok, err)
+	}
+}

@@ -18,10 +18,11 @@ import { TerminalTab } from "./tabs/TerminalTab";
 import { EventsTab } from "./tabs/EventsTab";
 import { ChildrenTab } from "./tabs/ChildrenTab";
 import { ReviewTab } from "./worktreeReview/ReviewTab";
+import { RepoPanel } from "./repos/RepoPanel";
 import { EmptyState } from "../common/EmptyState";
 import type { NodeID, SessionStatus } from "../../gen/types";
 
-type TabId = "terminal" | "events" | "children" | "review";
+type TabId = "terminal" | "events" | "children" | "review" | "repos";
 
 const BASE_TABS: { id: TabId; label: string }[] = [
   { id: "terminal", label: "Terminal" },
@@ -80,7 +81,11 @@ export function NodeView() {
   const session = node.current_session_id ? sessionsById[node.current_session_id] : undefined;
   const activeSession = session && !isSessionTerminal(session.status) ? session : undefined;
   const hasWorktree = node.kind === "task" && node.workspace_dir !== "";
-  const tabs = hasWorktree ? [...BASE_TABS, { id: "review" as const, label: "Review" }] : BASE_TABS;
+  const tabs = [
+    ...BASE_TABS,
+    ...(node.kind === "project" ? [{ id: "repos" as const, label: "Repos" }] : []),
+    ...(hasWorktree ? [{ id: "review" as const, label: "Review" }] : []),
+  ];
 
   // Every user action funnels through this wrapper so a failed request is
   // always surfaced — a silently swallowed rejection reads as a dead button.
@@ -198,6 +203,7 @@ export function NodeView() {
         )}
         {tab === "events" && <EventsTab nodeId={id} />}
         {tab === "children" && <ChildrenTab node={node} />}
+        {tab === "repos" && node.kind === "project" && <RepoPanel projectId={node.id} />}
         {tab === "review" && hasWorktree && <ReviewTab node={node} onAddressed={() => setTab("terminal")} />}
       </div>
     </div>

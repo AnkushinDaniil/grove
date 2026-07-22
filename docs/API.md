@@ -315,6 +315,33 @@ node so the agent fixes them; `merge` squash-merges the worktree into its
 parent (a clean tree required). `ai-draft` (the PR endpoint) is reused for
 worktree comments by passing the worktree path as `dir` and `pr: 0`.
 
+## Repos (`/api/v1/projects/{id}/repos`)
+
+Git repositories registered on a project node. Once a project has repos, new
+task nodes under it auto-provision a worktree per repo (branch
+`grove/<short8>-<slug>`), which is what makes worktree review, merge-back and
+PR-from-task work.
+
+| Method & path | Body | Returns |
+|---|---|---|
+| `GET  /projects/{id}/repos` | — | `{repos: [Repo]}` |
+| `POST /projects/{id}/repos` | `{name?, source_path, default_base?}` | `Repo` (201) |
+| `DELETE /repos/{id}` | — | 204 |
+
+```jsonc
+// Repo
+{ "id": "…", "project_id": "…", "name": "nethermind", "source_path": "/Users/…/nethermind",
+  "default_base": "" /* "" = auto-detect origin/HEAD */, "created_at": "…" }
+```
+
+`source_path` must be an absolute path to a git repository (validated: exists,
+is a git work tree). `name` defaults to the repo directory's basename; it must
+be a plain directory name (used as the worktree subdir). Adding a repo only
+affects tasks created afterward. `DELETE /repos/{id}` returns 204 for a repo
+with no provisioned worktrees, and **409** for one that tasks still depend on
+(its worktree rows reference it) — you cannot remove a repo out from under
+existing task worktrees.
+
 ## WebSocket `/ws/state` (JSON text frames, server-push)
 
 - On connect the server always sends
