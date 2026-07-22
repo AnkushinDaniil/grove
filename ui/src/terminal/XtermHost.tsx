@@ -79,41 +79,33 @@ export function XtermHost({ sessionId, className }: XtermHostProps) {
 
     term.open(container);
     fitAddon.fit();
+    term.focus();
 
     termRef.current = term;
     fitAddonRef.current = fitAddon;
     searchAddonRef.current = searchAddon;
     setHasSearchAddon(true);
 
-    // WebGL only while genuinely focused: browsers cap concurrent contexts
-    // and most mounted terminals sit idle in the background. xterm.js has
-    // no onFocus/onBlur event on Terminal itself, so we listen on the
-    // hidden <textarea> it uses to capture keyboard input -- the same
-    // element `term.focus()`/`term.blur()` target.
-    const handleFocus = () => {
-      if (webglAddonRef.current) return;
-      void import("@xterm/addon-webgl").then(({ WebglAddon: WebglAddonCtor }) => {
-        if (termRef.current !== term) return; // torn down while the import was in flight
-        try {
-          const webgl = new WebglAddonCtor();
-          term.loadAddon(webgl);
-          webglAddonRef.current = webgl;
-        } catch {
-          // WebGL unavailable (disabled GPU, headless CI, ...) -- the
-          // default renderer already works, so just skip the upgrade.
-        }
-      });
-    };
-    const handleBlur = () => {
-      webglAddonRef.current?.dispose();
-      webglAddonRef.current = null;
-    };
-    term.textarea?.addEventListener("focus", handleFocus);
-    term.textarea?.addEventListener("blur", handleBlur);
+    // Upgrade to the WebGL renderer once, at mount. An earlier version toggled
+    // it on textarea focus/blur to conserve GPU contexts, but loading the
+    // addon rebuilds the render layer and was intermittently stealing keyboard
+    // focus the moment the user clicked in -- leaving the terminal unfocusable
+    // and unable to receive input. Only a handful of terminals are ever mounted
+    // at once (one per visible node view), far under the browser's context cap,
+    // so a persistent context per terminal is fine.
+    void import("@xterm/addon-webgl").then(({ WebglAddon: WebglAddonCtor }) => {
+      if (termRef.current !== term) return; // torn down while the import was in flight
+      try {
+        const webgl = new WebglAddonCtor();
+        term.loadAddon(webgl);
+        webglAddonRef.current = webgl;
+      } catch {
+        // WebGL unavailable (disabled GPU, headless CI, ...) -- the default
+        // renderer already works, so just skip the upgrade.
+      }
+    });
 
     return () => {
-      term.textarea?.removeEventListener("focus", handleFocus);
-      term.textarea?.removeEventListener("blur", handleBlur);
       webglAddonRef.current?.dispose();
       webglAddonRef.current = null;
       term.dispose();
@@ -123,6 +115,12 @@ export function XtermHost({ sessionId, className }: XtermHostProps) {
       setHasSearchAddon(false);
     };
   }, [sessionId]);
+
+  // Focus the terminal as soon as its session goes live, so a freshly attached
+  // session is immediately typeable without a click.
+  useEffect(() => {
+    if (isLive) termRef.current?.focus();
+  }, [isLive]);
 
   const { resize, sendInput } = useTermSocket({
     sessionId,
@@ -185,14 +183,21 @@ export function XtermHost({ sessionId, className }: XtermHostProps) {
   }, [searchOpen]);
 
   return (
-    <div className={clsx("relative flex h-full min-h-0 flex-col bg-canvas", className)}>
+    // Any mousedown in the terminal area (including the padding gutter) focuses
+    // xterm's input, so clicking anywhere lets the user type immediately.
+    <div
+      className={clsx("relative flex h-full min-h-0 flex-col bg-canvas", className)}
+      onMouseDown={() => termRef.current?.focus()}
+    >
       {!isLive && exitCode === null && (
-        <div className="absolute inset-x-0 top-0 z-10 flex items-center gap-2 border-b border-border bg-surface-2/90 px-3 py-1.5 text-2xs text-ink-faint backdrop-blur-sm">
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center gap-2 border-b border-border bg-surface-2/90 px-3 py-1.5 text-2xs text-ink-faint backdrop-blur-sm">
           <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-ink-faint" />
           syncing scrollback…
         </div>
       )}
-      <div ref={containerRef} className="min-h-0 flex-1 overflow-hidden px-3 py-2" />
+      {/* overscroll-contain keeps terminal wheel/touch scrolling from chaining
+          to the page once the scrollback hits its top or bottom. */}
+      <div ref={containerRef} className="min-h-0 flex-1 overflow-hidden overscroll-contain px-3 py-2" />
       {hasSearchAddon && searchOpen && (
         <TerminalSearchBar
           onClose={() => {

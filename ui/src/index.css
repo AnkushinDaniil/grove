@@ -167,6 +167,16 @@ button {
   font-family: inherit;
 }
 
+/* xterm.js: let the terminal fill its host so clicks/scroll land on it across
+   its whole area, and keep the scrollback viewport's wheel/touch scrolling
+   from chaining to the page at the ends. */
+.xterm {
+  height: 100%;
+}
+.xterm .xterm-viewport {
+  overscroll-behavior: contain;
+}
+
 /* cmdk exposes these as plain DOM attributes for styling -- see
    components/palette/CommandPalette.tsx. */
 [cmdk-group-heading] {
