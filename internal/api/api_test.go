@@ -366,7 +366,19 @@ func TestVersionUsageStats(t *testing.T) {
 		t.Errorf("usage.profiles = %v, want empty array", usage["profiles"])
 	}
 
-	h.decode(h.do(http.MethodGet, "/api/v1/stats", nil), http.StatusNotImplemented, nil)
+	// Stats over the empty workspace defaults to scope=root, range=7d, and a
+	// zeroed-but-well-formed structure.
+	var stats statsResponse
+	h.decode(h.do(http.MethodGet, "/api/v1/stats", nil), http.StatusOK, &stats)
+	if stats.Range != statsRange7d {
+		t.Errorf("stats.range = %q, want %q", stats.Range, statsRange7d)
+	}
+	if stats.Scope != string(h.root.ID) {
+		t.Errorf("stats.scope = %q, want root %q", stats.Scope, h.root.ID)
+	}
+	if stats.Tokens.Total.Input != 0 || len(stats.Tools) != 0 || stats.Agents.SessionsActive != 0 {
+		t.Errorf("empty workspace stats not zeroed: %+v", stats)
+	}
 }
 
 func TestAuthSessionAndMe(t *testing.T) {

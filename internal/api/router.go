@@ -86,6 +86,10 @@ type Handlers struct {
 	github  GitHubClient
 	git     *gitcli.Runner
 
+	// stats caches computed GET /stats payloads for statsCacheTTL, keyed by
+	// scope+range, so repeated dashboard polls do not re-aggregate the DB.
+	stats *statsCache
+
 	// aiDrafter runs a headless claude to draft PR review text (POST
 	// /reviews/pr/ai-draft). A nil value falls back to the real claude exec
 	// (defaultAIDrafter); tests override it to avoid shelling out.
@@ -120,6 +124,7 @@ func New(cfg Config) *Handlers {
 		home:         home,
 		github:       gh,
 		git:          gitcli.NewRunner(),
+		stats:        newStatsCache(statsCacheTTL),
 	}
 }
 
@@ -143,6 +148,10 @@ func (h *Handlers) Routes() http.Handler {
 	mux.HandleFunc("GET /api/v1/version", h.handleVersion)
 	mux.HandleFunc("GET /api/v1/usage", h.handleUsage)
 	mux.HandleFunc("GET /api/v1/stats", h.handleStats)
+
+	mux.HandleFunc("POST /api/v1/feedback", h.handleCreateFeedback)
+	mux.HandleFunc("GET /api/v1/feedback", h.handleListFeedback)
+	mux.HandleFunc("POST /api/v1/feedback/{id}/resolve", h.handleResolveFeedback)
 
 	mux.HandleFunc("GET /api/v1/reviews", h.handleReviews)
 	mux.HandleFunc("GET /api/v1/reviews/sources", h.handleReviewSources)

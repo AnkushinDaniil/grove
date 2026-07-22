@@ -15,6 +15,9 @@ import {
 import type { Event } from "../../../gen/types";
 import { RelativeTime } from "../../common/RelativeTime";
 import { summarizeEvent } from "../../../lib/eventSummary";
+import { feedbackPrefillForEvent } from "../../../lib/feedbackPrefill";
+import { FeedbackButton } from "../../feedback/FeedbackButton";
+import { FeedbackComposer } from "../../feedback/FeedbackComposer";
 import type { LucideIcon } from "lucide-react";
 
 const TYPE_ICON: Record<Event["type"], LucideIcon> = {
@@ -35,36 +38,68 @@ interface EventRowProps {
 
 export function EventRow({ event }: EventRowProps) {
   const [expanded, setExpanded] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   // Injected user prompts get a distinct icon + accent tint so a headless
   // conversation reads as "you said / it said" at a glance, without a full
   // chat-bubble treatment -- everything else keeps the neutral styling.
   const isUserText = event.type === "text" && event.payload.role === "user";
   const Icon = isUserText ? CircleUser : TYPE_ICON[event.type];
+  const feedbackPrefill = feedbackPrefillForEvent(event);
 
   return (
-    <li className="rounded-md">
-      <button
-        type="button"
-        onClick={() => setExpanded((v) => !v)}
-        className="flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-hover"
-      >
-        <ChevronRight
-          size={11}
-          className={clsx("mt-1 shrink-0 text-ink-faint transition-transform", expanded && "rotate-90")}
+    <li className="group rounded-md">
+      {/* The row's own toggle is a nested button (expand payload) plus a
+          sibling feedback trigger, so this outer element can't be a button
+          itself -- a <button> inside a <button> is invalid markup. The
+          feedback trigger fades in on row hover/focus (dense list, one
+          extra icon per row would otherwise be a lot of visual noise) but
+          stays visible whenever its own composer is open. */}
+      <div className="flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-xs hover:bg-hover">
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="flex min-w-0 flex-1 items-start gap-2 text-left"
+        >
+          <ChevronRight
+            size={11}
+            className={clsx("mt-1 shrink-0 text-ink-faint transition-transform", expanded && "rotate-90")}
+          />
+          <Icon size={13} className={clsx("mt-0.5 shrink-0", isUserText ? "text-accent" : "text-ink-faint")} />
+          <span className={clsx("min-w-0 flex-1 truncate", isUserText ? "text-ink" : "text-ink-muted")}>
+            {summarizeEvent(event)}
+          </span>
+          <span className="shrink-0 rounded border border-border-strong px-1 py-px text-[10px] uppercase tracking-wide text-ink-disabled">
+            {event.type}
+          </span>
+          <RelativeTime iso={event.created_at} className="shrink-0 text-ink-faint" />
+        </button>
+        <FeedbackButton
+          active={feedbackOpen}
+          onClick={() => setFeedbackOpen((v) => !v)}
+          iconSize={11}
+          className={clsx(
+            "h-5 w-5 shrink-0",
+            feedbackOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
+          )}
         />
-        <Icon size={13} className={clsx("mt-0.5 shrink-0", isUserText ? "text-accent" : "text-ink-faint")} />
-        <span className={clsx("min-w-0 flex-1 truncate", isUserText ? "text-ink" : "text-ink-muted")}>
-          {summarizeEvent(event)}
-        </span>
-        <span className="shrink-0 rounded border border-border-strong px-1 py-px text-[10px] uppercase tracking-wide text-ink-disabled">
-          {event.type}
-        </span>
-        <RelativeTime iso={event.created_at} className="shrink-0 text-ink-faint" />
-      </button>
+      </div>
       {expanded && (
         <pre className="mb-1.5 ml-11 mr-2 overflow-x-auto rounded-md border border-border bg-canvas p-2 text-[10px] leading-relaxed text-ink-muted">
           {JSON.stringify(event.payload, null, 2)}
         </pre>
+      )}
+      {feedbackOpen && (
+        <div className="mb-1.5 ml-2 mr-2">
+          <FeedbackComposer
+            nodeId={event.node_id}
+            sessionId={event.session_id || undefined}
+            eventId={event.id}
+            initialKind={feedbackPrefill.kind}
+            initialSubject={feedbackPrefill.subject}
+            onSubmitted={() => setFeedbackOpen(false)}
+            onCancel={() => setFeedbackOpen(false)}
+          />
+        </div>
       )}
     </li>
   );

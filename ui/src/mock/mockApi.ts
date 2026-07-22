@@ -16,6 +16,8 @@ import { reviewWorld } from "./reviewWorld";
 import { prReviewWorld } from "./prReviewWorld";
 import { worktreeReviewWorld } from "./worktreeReviewWorld";
 import { repoWorld } from "./repoWorld";
+import { buildFixtureStats } from "./statsFixtures";
+import { feedbackWorld } from "./feedbackWorld";
 
 function nowISO(): string {
   return new Date().toISOString();
@@ -361,6 +363,22 @@ export async function createMockApiClient(): Promise<ApiClient> {
 
     async deleteRepo(repoId) {
       repoWorld.remove(repoId);
+    },
+
+    async getStats(scope, range) {
+      return buildFixtureStats(scope, range ?? "7d");
+    },
+
+    async listFeedback(status) {
+      return feedbackWorld.list(status);
+    },
+
+    async createFeedback(body) {
+      return feedbackWorld.create(body);
+    },
+
+    async resolveFeedback(id, fixNodeId) {
+      return feedbackWorld.resolve(id, fixNodeId);
     },
   };
 }

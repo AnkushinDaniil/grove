@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import clsx from "clsx";
 import { useLocation, useNavigate } from "react-router";
-import { CircleDot, GitPullRequest, Inbox as InboxIcon, ListTree } from "lucide-react";
+import { BarChart3, CircleDot, GitPullRequest, Inbox as InboxIcon, ListTree } from "lucide-react";
 import { useShallow } from "zustand/react/shallow";
 import { selectInboxEvents, useInboxStore } from "../../state/inbox";
 import { selectNeedsAttentionCount, useReviewsStore } from "../../state/reviews";
@@ -12,8 +12,8 @@ interface BottomTabsProps {
 }
 
 /** Mobile-only primary navigation (`md:hidden`): Tree opens the slide-over
- *  drawer, Node/Inbox/Reviews are real routes. "Node" remembers the last
- *  path that isn't one of those two tabs' own routes, so returning to it
+ *  drawer, Node/Inbox/Reviews/Stats are real routes. "Node" remembers the
+ *  last path that isn't one of those tabs' own routes, so returning to it
  *  doesn't dump you back at the workspace root. */
 export function BottomTabs({ onOpenTree }: BottomTabsProps) {
   const location = useLocation();
@@ -24,14 +24,16 @@ export function BottomTabs({ onOpenTree }: BottomTabsProps) {
 
   const isInbox = location.pathname === "/inbox";
   const isReviews = location.pathname === "/reviews";
+  const isStats = location.pathname === "/stats";
+  const isNode = !isInbox && !isReviews && !isStats;
 
   useEffect(() => {
-    if (!isInbox && !isReviews) lastMainPath.current = location.pathname;
-  }, [location.pathname, isInbox, isReviews]);
+    if (isNode) lastMainPath.current = location.pathname;
+  }, [location.pathname, isNode]);
 
   return (
     <nav
-      className="grid grid-cols-4 border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] md:hidden"
+      className="grid grid-cols-5 border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] md:hidden"
       aria-label="Primary"
     >
       <button
@@ -47,9 +49,9 @@ export function BottomTabs({ onOpenTree }: BottomTabsProps) {
         onClick={() => navigate(lastMainPath.current)}
         className={clsx(
           "flex min-h-14 flex-col items-center justify-center gap-0.5 active:bg-hover",
-          !isInbox && !isReviews ? "text-accent" : "text-ink-faint",
+          isNode ? "text-accent" : "text-ink-faint",
         )}
-        aria-current={!isInbox && !isReviews ? "page" : undefined}
+        aria-current={isNode ? "page" : undefined}
       >
         <CircleDot size={19} />
         <span className="text-[10px]">Node</span>
@@ -79,6 +81,18 @@ export function BottomTabs({ onOpenTree }: BottomTabsProps) {
         <GitPullRequest size={19} />
         <span className="text-[10px]">Reviews</span>
         {reviewsCount > 0 && <AttentionBadge count={reviewsCount} className="absolute right-[19%] top-1.5" />}
+      </button>
+      <button
+        type="button"
+        onClick={() => navigate("/stats")}
+        className={clsx(
+          "flex min-h-14 flex-col items-center justify-center gap-0.5 active:bg-hover",
+          isStats ? "text-accent" : "text-ink-faint",
+        )}
+        aria-current={isStats ? "page" : undefined}
+      >
+        <BarChart3 size={19} />
+        <span className="text-[10px]">Stats</span>
       </button>
     </nav>
   );

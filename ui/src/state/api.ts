@@ -4,26 +4,33 @@ import type {
   AiDraftRequest,
   AiDraftResponse,
   ArchiveResponse,
+  CreateFeedbackRequest,
   CreateNodeRequest,
   CreateRepoRequest,
   CreateSessionRequest,
   DirSuggestions,
   DraftComment,
   Event,
+  Feedback,
+  FeedbackStatusFilter,
   MergeWorktreeResponse,
   Node,
+  NodeID,
   PatchNodeRequest,
   PRReview,
   PromptRequest,
   ReplyToThreadRequest,
   Repo,
   ReposResponse,
+  ResolveFeedbackRequest,
   ResumeTarget,
   ReviewDraftsResponse,
   ReviewSources,
   ReviewsResponse,
   Session,
   StartReviewRequest,
+  StatsRange,
+  StatsResponse,
   SubmitReviewRequest,
   SubmitReviewResponse,
   TreeSnapshot,
@@ -113,6 +120,18 @@ export interface ApiClient {
   /** Idempotent: removing a repo only affects tasks created afterwards;
    *  existing task worktrees are untouched. */
   deleteRepo(repoId: string): Promise<void>;
+
+  // --- Stats (/api/v1/stats) ---
+  /** Aggregated token/agent/flow/tool/feedback stats over a scope subtree
+   *  (undefined scope = whole workspace) and a time range. */
+  getStats(scope?: NodeID, range?: StatsRange): Promise<StatsResponse>;
+
+  // --- Feedback loop (/api/v1/feedback) ---
+  listFeedback(status?: FeedbackStatusFilter): Promise<Feedback[]>;
+  createFeedback(body: CreateFeedbackRequest): Promise<Feedback>;
+  /** Marks feedback resolved, optionally linking the fix task node that
+   *  closes the loop (see "Create fix task" in docs/API.md). */
+  resolveFeedback(id: string, fixNodeId?: NodeID): Promise<Feedback>;
 }
 
 function isErrorBody(v: unknown): v is { error: string } {
@@ -261,6 +280,18 @@ export const realApiClient: ApiClient = {
     }),
 
   deleteRepo: (repoId) => request(`/repos/${encodeURIComponent(repoId)}`, { method: "DELETE" }),
+
+  getStats: (scope, range) => request(`/stats${qs({ scope, range })}`),
+
+  listFeedback: (status) => request(`/feedback${qs({ status })}`),
+
+  createFeedback: (body) => request("/feedback", { method: "POST", body: JSON.stringify(body) }),
+
+  resolveFeedback: (id, fixNodeId) =>
+    request(`/feedback/${encodeURIComponent(id)}/resolve`, {
+      method: "POST",
+      body: JSON.stringify({ fix_node_id: fixNodeId } satisfies ResolveFeedbackRequest),
+    }),
 };
 
 // Mock mode swaps in an in-memory client. The dynamic import keeps src/mock/

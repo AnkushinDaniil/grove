@@ -549,6 +549,160 @@ export interface ReposResponse {
   repos: Repo[];
 }
 
+// --- Stats (/api/v1/stats, draft -- additive evolution allowed) ---
+
+export type StatsRange = "24h" | "7d" | "30d";
+
+export interface TokenTotals {
+  input: number;
+  output: number;
+  cache_read: number;
+  cost_usd: number;
+}
+
+export interface TokenByDay {
+  day: string; // "2026-07-20"
+  input: number;
+  output: number;
+  cost_usd: number;
+}
+
+export interface TokenByDriver {
+  driver: string;
+  input: number;
+  output: number;
+  cost_usd: number;
+}
+
+export interface TokenByProfile {
+  profile_id: ProfileID;
+  name: string;
+  input: number;
+  output: number;
+  cost_usd: number;
+}
+
+export interface TokenTopNode {
+  node_id: NodeID;
+  title: string;
+  input: number;
+  output: number;
+  cost_usd: number;
+}
+
+export interface StatsTokens {
+  total: TokenTotals;
+  by_day: TokenByDay[];
+  by_driver: TokenByDriver[];
+  by_profile: TokenByProfile[];
+  top_nodes: TokenTopNode[];
+}
+
+export interface AgentsByDay {
+  day: string;
+  started: number;
+  done: number;
+  failed: number;
+}
+
+export interface AgentsByDriver {
+  driver: string;
+  count: number;
+}
+
+export interface StatsAgents {
+  sessions_active: number;
+  sessions_by_day: AgentsByDay[];
+  avg_session_minutes: number;
+  by_driver: AgentsByDriver[];
+}
+
+export interface StatsFlow {
+  tasks_created: number;
+  tasks_done: number;
+  tasks_failed: number;
+  median_task_hours: number;
+  attention_wait_p50_minutes: number;
+  attention_wait_p95_minutes: number;
+  prs_opened: number;
+  prs_merged: number;
+}
+
+// Parsed from tool_call/tool_result event payloads.
+export interface StatsTool {
+  name: string;
+  calls: number;
+  errors: number;
+}
+
+export interface StatsModel {
+  model: string;
+  input: number;
+  output: number;
+  cost_usd: number;
+}
+
+// Skill-tool invocations parsed from tool_call payloads (payload.name ===
+// "Skill"; see FeedbackKind's "skill" doc comment for the same distinction).
+export interface StatsSkill {
+  skill: string;
+  invocations: number;
+}
+
+export interface StatsFeedbackSummary {
+  kind: FeedbackKind;
+  subject: string;
+  open: number;
+  total: number;
+}
+
+export interface StatsResponse {
+  range: StatsRange;
+  scope: NodeID | ""; // "" = whole workspace
+  tokens: StatsTokens;
+  agents: StatsAgents;
+  flow: StatsFlow;
+  tools: StatsTool[];
+  models: StatsModel[];
+  skills: StatsSkill[];
+  feedback: StatsFeedbackSummary[];
+}
+
+// --- Feedback loop (/api/v1/feedback) ---
+
+// User-recorded quality signal about a skill/tool/model/agent turn -- "skill"
+// specifically means a Skill-tool invocation (payload.name === "Skill" on a
+// tool_call event), distinct from "tool" (any other tool_call).
+export type FeedbackKind = "skill" | "tool" | "model" | "agent" | "other";
+
+export type FeedbackStatusFilter = "open" | "resolved" | "all";
+
+export interface Feedback {
+  id: string;
+  node_id: NodeID;
+  session_id: SessionID | "";
+  event_id: EventID | "";
+  kind: FeedbackKind;
+  subject: string;
+  comment: string;
+  created_at: string;
+  resolved_at?: string; // unset = open
+  fix_node_id?: NodeID | ""; // set once "Create fix task" links a fix node
+}
+
+export interface CreateFeedbackRequest {
+  node_id: NodeID;
+  session_id?: SessionID;
+  event_id?: EventID;
+  kind: FeedbackKind;
+  subject?: string;
+  comment: string;
+}
+
+export interface ResolveFeedbackRequest {
+  fix_node_id?: NodeID;
+}
+
 // --- WebSocket /ws/state (JSON text frames, server-push) ---
 
 export interface WSHello {

@@ -1,7 +1,7 @@
 // Shared class fragments and label maps used across components. Centralized
 // so the focus ring, status vocabulary, and kind vocabulary render
 // identically everywhere instead of drifting per-component.
-import type { Attention, NodeKind, NodeStatus, SessionStatus } from "../gen/types";
+import type { Attention, FeedbackKind, NodeKind, NodeStatus, SessionStatus } from "../gen/types";
 
 export const FOCUS_RING =
   "outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-canvas";
@@ -52,4 +52,12 @@ export const CHILD_KIND_FOR: Record<NodeKind, NodeKind | null> = {
   workspace: "project",
   project: "task",
   task: "task",
+};
+
+export const FEEDBACK_KIND_LABEL: Record<FeedbackKind, string> = {
+  skill: "Skill",
+  tool: "Tool",
+  model: "Model",
+  agent: "Agent",
+  other: "Other",
 };

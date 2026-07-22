@@ -20,6 +20,8 @@ import { ChildrenTab } from "./tabs/ChildrenTab";
 import { ReviewTab } from "./worktreeReview/ReviewTab";
 import { RepoPanel } from "./repos/RepoPanel";
 import { EmptyState } from "../common/EmptyState";
+import { FeedbackButton } from "../feedback/FeedbackButton";
+import { FeedbackComposer } from "../feedback/FeedbackComposer";
 import type { NodeID, SessionStatus } from "../../gen/types";
 
 type TabId = "terminal" | "events" | "children" | "review" | "repos";
@@ -43,12 +45,14 @@ export function NodeView() {
 
   const [tab, setTab] = useState<TabId>("terminal");
   const [headlessOpen, setHeadlessOpen] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
     setTab("terminal");
     setHeadlessOpen(false);
+    setFeedbackOpen(false);
     setActionError(null);
   }, [id]);
 
@@ -143,6 +147,7 @@ export function NodeView() {
               {rollup.attentionCount > 0 && ` · ${rollup.attentionCount} need attention`}
             </span>
           )}
+          <FeedbackButton active={feedbackOpen} onClick={() => setFeedbackOpen((v) => !v)} className="ml-auto" />
         </div>
         {node.brief && <p className="max-w-2xl font-sans text-xs text-ink-muted">{node.brief}</p>}
         <ActionsRow
@@ -155,6 +160,15 @@ export function NodeView() {
         />
         {headlessOpen && (
           <StartHeadlessPopover onStart={(prompt) => void startHeadless(prompt)} onCancel={() => setHeadlessOpen(false)} />
+        )}
+        {feedbackOpen && (
+          <FeedbackComposer
+            nodeId={id}
+            sessionId={activeSession?.id}
+            initialKind="agent"
+            onSubmitted={() => setFeedbackOpen(false)}
+            onCancel={() => setFeedbackOpen(false)}
+          />
         )}
         {actionError && (
           <div className="flex items-center gap-2 rounded-md border border-status-failed/40 bg-status-failed/10 px-2.5 py-1.5 text-xs text-status-failed">
