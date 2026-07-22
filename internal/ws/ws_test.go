@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -102,6 +103,26 @@ func (h *wsHarness) dial(path string) *websocket.Conn {
 	return c
 }
 
+// dialOrigin opens a WebSocket with an explicit Origin header, returning the
+// error instead of failing, so both authorized and rejected origins can be
+// asserted by the same helper.
+func (h *wsHarness) dialOrigin(path, origin string) (*websocket.Conn, error) {
+	h.t.Helper()
+	url := "ws" + strings.TrimPrefix(h.ts.URL, "http") + path
+	ctx, cancel := context.WithTimeout(h.t.Context(), 5*time.Second)
+	defer cancel()
+	hdr := http.Header{}
+	hdr.Set("Origin", origin)
+	c, resp, err := websocket.Dial(ctx, url, &websocket.DialOptions{
+		HTTPClient: h.ts.Client(),
+		HTTPHeader: hdr,
+	})
+	if resp != nil && resp.Body != nil {
+		_ = resp.Body.Close()
+	}
+	return c, err
+}
+
 // readFrame reads one text frame and unmarshals it into v.
 func readFrame(t *testing.T, ctx context.Context, c *websocket.Conn, v any) {
 	t.Helper()
@@ -162,6 +183,36 @@ func TestStateHelloAndDelta(t *testing.T) {
 	}
 	if !containsNode(delta.Nodes, string(proj.ID)) {
 		t.Error("delta nodes missing the created project")
+	}
+}
+
+func TestStateOriginAllowlist(t *testing.T) {
+	h := newWSHarness(t, nil)
+	ctx := t.Context()
+
+	// A Tailscale MagicDNS origin (a phone reaching the daemon over `tailscale
+	// serve`) is authorized even though it differs from the loopback request
+	// Host, so the tree/terminal sockets live-update remotely -- see ws.go's
+	// OriginPatterns and internal/server/middleware.go's tailnetHostSuffix.
+	c, err := h.dialOrigin("/ws/state", "https://mymachine.tailnet-name.ts.net")
+	if err != nil {
+		t.Fatalf("dial with .ts.net origin: %v", err)
+	}
+	defer func() { _ = c.CloseNow() }()
+	var hello wsFrame
+	readFrame(t, ctx, c, &hello)
+	if hello.T != "hello" {
+		t.Fatalf("first frame t = %q, want hello", hello.T)
+	}
+
+	// A foreign web origin is rejected: the cross-site WebSocket-hijack defense
+	// the origin allowlist exists to provide.
+	bad, err := h.dialOrigin("/ws/state", "https://evil.example.com")
+	if bad != nil {
+		_ = bad.CloseNow()
+	}
+	if err == nil {
+		t.Fatal("dial with foreign origin succeeded; want rejection")
 	}
 }
 

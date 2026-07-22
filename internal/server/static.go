@@ -32,6 +32,15 @@ func (s *Server) staticHandler() http.Handler {
 // itself must NEVER be cached, or a browser keeps loading an old bundle after
 // the daemon updates. Without this, every grove upgrade silently served a
 // stale UI until the user hard-refreshed.
+//
+// The service worker (/sw.js, Vite copies it from ui/public/ to dist root)
+// rides the same two guarantees for free: it is a real file under dist, so
+// dist.Open succeeds and this handler serves it directly — the SPA fallback
+// below never hijacks it — and its name has no "assets/" prefix, so
+// setCacheHeaders's default branch gives it Cache-Control: no-cache exactly
+// like index.html (a stale cached service worker would be just as bad as a
+// stale cached bundle: the browser would keep running old push-handling code
+// after an upgrade).
 func spaHandler(dist fs.FS) http.Handler {
 	fileServer := http.FileServer(http.FS(dist))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

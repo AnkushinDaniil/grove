@@ -768,6 +768,29 @@ export interface MemoryResponse {
   healthy: boolean;
 }
 
+// --- Web push (/api/v1/push) ---
+
+// GET /push/key -- the VAPID applicationServerKey (base64url), passed to
+// PushManager.subscribe() to authorize this daemon as the push sender.
+export interface PushKeyResponse {
+  public_key: string;
+}
+
+// POST /push/subscribe body -- flattened from the browser's PushSubscription
+// (see PushSubscription.toJSON().keys, which carries exactly these two).
+export interface PushSubscribeRequest {
+  endpoint: string;
+  keys: {
+    p256dh: string;
+    auth: string;
+  };
+}
+
+// POST /push/unsubscribe body.
+export interface PushUnsubscribeRequest {
+  endpoint: string;
+}
+
 // --- WebSocket /ws/state (JSON text frames, server-push) ---
 
 export interface WSHello {

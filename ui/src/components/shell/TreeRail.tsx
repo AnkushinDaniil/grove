@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import clsx from "clsx";
 import { Link, useNavigate, useParams } from "react-router";
-import { BarChart3, CircleUser, GitPullRequest, Inbox as InboxIcon, Plus, X } from "lucide-react";
+import { BarChart3, CircleUser, GitPullRequest, Inbox as InboxIcon, Plus, Settings, X } from "lucide-react";
 import { useTreeStore } from "../../state/tree";
 import { selectInboxEvents, useInboxStore } from "../../state/inbox";
 import { selectNeedsAttentionCount, useReviewsStore } from "../../state/reviews";
@@ -216,6 +216,17 @@ export function TreeRail({ mobileOpen, onMobileClose }: TreeRailProps) {
             )}
           >
             <CircleUser size={13} />
+          </Link>
+          <Link
+            to="/settings"
+            aria-label="Settings"
+            onClick={onMobileClose}
+            className={clsx(
+              "flex min-h-11 items-center gap-1 rounded px-1.5 hover:bg-hover hover:text-ink md:min-h-0 md:py-0.5",
+              FOCUS_RING,
+            )}
+          >
+            <Settings size={13} />
           </Link>
           <button
             type="button"

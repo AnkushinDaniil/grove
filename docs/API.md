@@ -387,6 +387,25 @@ endpoint is for the UI's node memory tab.
 `healthy` is false (with `backend:""`) when MemPalace is unavailable — the tab
 shows a "run `grove memory install`" hint rather than erroring.
 
+## Web push (`/api/v1/push`)
+
+Push attention notifications to a phone (or any browser) even when the tab is
+closed. Requires an HTTPS origin — served over the tailnet via `tailscale serve
+7433`. The daemon generates a VAPID keypair on first run (stored in settings)
+and dispatches an encrypted push (RFC 8291) to each subscription when a node
+raises attention, alongside the existing macOS sink.
+
+| Method & path | Body | Returns |
+|---|---|---|
+| `GET  /push/key` | — | `{public_key}` (VAPID applicationServerKey, base64url) |
+| `POST /push/subscribe` | `{endpoint, keys: {p256dh, auth}}` | 204 |
+| `POST /push/unsubscribe` | `{endpoint}` | 204 |
+
+The service worker (`/sw.js`, served by the daemon) receives the push and shows
+a notification whose click deep-links to `/n/<node_id>`. Subscriptions are
+pruned when the push endpoint returns 404/410 (gone). No third party: pushes go
+directly from the daemon to the browser's push service.
+
 ## WebSocket `/ws/state` (JSON text frames, server-push)
 
 - On connect the server always sends

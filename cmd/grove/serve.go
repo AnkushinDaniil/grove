@@ -22,6 +22,7 @@ import (
 	"github.com/AnkushinDaniil/grove/internal/gitcli"
 	"github.com/AnkushinDaniil/grove/internal/memory"
 	"github.com/AnkushinDaniil/grove/internal/notify"
+	"github.com/AnkushinDaniil/grove/internal/push"
 	"github.com/AnkushinDaniil/grove/internal/server"
 	"github.com/AnkushinDaniil/grove/internal/session"
 	"github.com/AnkushinDaniil/grove/internal/store"
@@ -173,19 +174,29 @@ func buildServer(ctx context.Context, logger *slog.Logger, layout config.Layout,
 	engine := worktree.NewEngine(gitcli.NewRunner(), layout.Worktrees, time.Now)
 	auth := api.NewAuth(token)
 
+	// The daemon's VAPID keypair is generated once and persisted in settings;
+	// a browser's subscription is bound to the public key, so it must survive
+	// restarts (see internal/push.GenerateOrLoadKeys).
+	pushKeys, err := push.GenerateOrLoadKeys(ctx, st)
+	if err != nil {
+		return nil, closeOnErr(st, fmt.Errorf("generate vapid keys: %w", err))
+	}
+	pushDispatcher := push.New(push.Config{Store: st, Keys: pushKeys, Logger: logger})
+
 	apiHandlers := api.New(api.Config{
-		Tree:         tr,
-		Sessions:     mgr,
-		Store:        st,
-		Worktrees:    engine,
-		Auth:         auth,
-		HookTokens:   hookTokens,
-		Orchestrator: orchestrator,
-		Memory:       mem,
-		Logger:       logger,
-		Version:      version,
-		Commit:       commit,
-		ProfilesDir:  layout.Profiles,
+		Tree:          tr,
+		Sessions:      mgr,
+		Store:         st,
+		Worktrees:     engine,
+		Auth:          auth,
+		HookTokens:    hookTokens,
+		Orchestrator:  orchestrator,
+		Memory:        mem,
+		Logger:        logger,
+		Version:       version,
+		Commit:        commit,
+		ProfilesDir:   layout.Profiles,
+		PushPublicKey: pushKeys.PublicKey(),
 	})
 	wsHandlers := ws.New(ws.Config{
 		Tree:          tr,
@@ -197,9 +208,12 @@ func buildServer(ctx context.Context, logger *slog.Logger, layout config.Layout,
 	// Roll usage events up into usage_rollup so GET /usage serves live data; the
 	// aggregator runs off ctx and does a final flush when the daemon shuts down.
 	usageagg.New(st, tr, logger).Start(ctx)
-	// Coalesce attention notifications through the platform sink and drive them
-	// off tree deltas; the server owns the runner's start/stop lifecycle.
-	notifyRunner := notify.NewRunner(tr, notify.NewCoalescer(notify.New(logger), time.Now), daemonURL, logger)
+	// Coalesce attention notifications through both the platform sink and Web
+	// Push, and drive them off tree deltas; the server owns the runner's
+	// start/stop lifecycle. MultiSink fans a notification out to both once the
+	// coalescer has decided it should fire, so both channels see the same set.
+	notifySink := notify.NewMultiSink(notify.New(logger), pushDispatcher)
+	notifyRunner := notify.NewRunner(tr, notify.NewCoalescer(notifySink, time.Now), daemonURL, logger)
 	//nolint:contextcheck // New is a pure constructor; the server owns its own lifetime context.
 	return server.New(server.Config{
 		Addr:     fmt.Sprintf("127.0.0.1:%d", port),

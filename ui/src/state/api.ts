@@ -25,6 +25,9 @@ import type {
   ProfilesResponse,
   PRReview,
   PromptRequest,
+  PushKeyResponse,
+  PushSubscribeRequest,
+  PushUnsubscribeRequest,
   ReplyToThreadRequest,
   Repo,
   ReposResponse,
@@ -154,6 +157,16 @@ export interface ApiClient {
    *  Read-only; agents write memory via MCP. healthy:false means MemPalace is
    *  unavailable -- the tab shows an install hint rather than erroring. */
   getNodeMemory(nodeId: string, scope?: MemoryScope): Promise<MemoryResponse>;
+
+  // --- Web push (/api/v1/push) ---
+  /** The daemon's VAPID applicationServerKey, passed to
+   *  PushManager.subscribe() to authorize it as the push sender. */
+  getPushKey(): Promise<PushKeyResponse>;
+  /** Registers a browser PushSubscription so the daemon can push attention
+   *  notifications to it (see state/push.ts for the full enable flow). */
+  pushSubscribe(body: PushSubscribeRequest): Promise<void>;
+  /** Removes a previously registered subscription by endpoint. */
+  pushUnsubscribe(endpoint: string): Promise<void>;
 }
 
 function isErrorBody(v: unknown): v is { error: string } {
@@ -325,6 +338,16 @@ export const realApiClient: ApiClient = {
 
   getNodeMemory: (nodeId, scope) =>
     request(`/nodes/${encodeURIComponent(nodeId)}/memory${qs({ scope })}`),
+
+  getPushKey: () => request("/push/key"),
+
+  pushSubscribe: (body) => request("/push/subscribe", { method: "POST", body: JSON.stringify(body) }),
+
+  pushUnsubscribe: (endpoint) =>
+    request("/push/unsubscribe", {
+      method: "POST",
+      body: JSON.stringify({ endpoint } satisfies PushUnsubscribeRequest),
+    }),
 };
 
 // Mock mode swaps in an in-memory client. The dynamic import keeps src/mock/

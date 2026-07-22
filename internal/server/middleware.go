@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"strings"
 
 	"github.com/AnkushinDaniil/grove/internal/api"
 )
@@ -12,6 +13,17 @@ import (
 // allowedHosts are the only Host header hostnames the daemon serves, a
 // DNS-rebinding defense (the daemon binds 127.0.0.1 only). Ports are ignored.
 var allowedHosts = map[string]bool{"127.0.0.1": true, "localhost": true}
+
+// tailnetHostSuffix is Tailscale MagicDNS's fixed suffix: hostnames under it
+// (e.g. mymachine.tailnet-name.ts.net) are issued and resolved exclusively by
+// Tailscale's own DNS for devices already admitted to the user's tailnet.
+// `tailscale serve` proxies a phone's request to this loopback daemon with
+// the original Host header intact, so accepting the suffix is required for
+// "remote access from your phone" (docs/DESIGN.md) to work at all. It does
+// not reopen the DNS-rebinding hole this check exists to close: unlike an
+// attacker-controlled domain, nobody outside the tailnet can make an
+// arbitrary *.ts.net name resolve to 127.0.0.1.
+const tailnetHostSuffix = ".ts.net"
 
 // hostGuard rejects requests whose Host header is not a loopback name, closing
 // the DNS-rebinding hole before any handler runs.
@@ -25,13 +37,14 @@ func (s *Server) hostGuard(next http.Handler) http.Handler {
 	})
 }
 
-// hostAllowed reports whether host (with or without a port) is a loopback name.
+// hostAllowed reports whether host (with or without a port) is a loopback
+// name or a Tailscale MagicDNS name (see tailnetHostSuffix).
 func hostAllowed(host string) bool {
 	name := host
 	if h, _, err := net.SplitHostPort(host); err == nil {
 		name = h
 	}
-	return allowedHosts[name]
+	return allowedHosts[name] || strings.HasSuffix(name, tailnetHostSuffix)
 }
 
 // guard authenticates API and WebSocket requests: the login and hook endpoints

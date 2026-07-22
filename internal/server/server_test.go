@@ -218,12 +218,16 @@ func readBody(t *testing.T, resp response, wantStatus int) string {
 
 func TestHostAllowedHelper(t *testing.T) {
 	cases := map[string]bool{
-		"127.0.0.1:7433": true,
-		"localhost:7433": true,
-		"127.0.0.1":      true,
-		"localhost":      true,
-		"evil.com:80":    false,
-		"10.0.0.1:7433":  false,
+		"127.0.0.1:7433":                    true,
+		"localhost:7433":                    true,
+		"127.0.0.1":                         true,
+		"localhost":                         true,
+		"evil.com:80":                       false,
+		"10.0.0.1:7433":                     false,
+		"mymachine.tailnet-name.ts.net":     true,
+		"mymachine.tailnet-name.ts.net:443": true,
+		"evilts.net":                        false, // no dot before the suffix: not *.ts.net
+		"attacker.com.ts.net.evil.com":      false, // suffix must be the true tail, not a substring
 	}
 	for host, want := range cases {
 		if got := hostAllowed(host); got != want {

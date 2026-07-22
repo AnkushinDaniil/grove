@@ -1,0 +1,15 @@
+<!-- Notification badge source: glyph only, transparent background. Android
+     monochrome-masks the notification `badge` using alpha only (fill color is
+     discarded and tinted by the OS), so a solid background rect here would
+     render as a filled square instead of the tree silhouette. badge-96.png
+     is the rasterized copy actually referenced by sw.js; regenerate it from
+     this file if the mark ever changes. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <path d="M256 128v256M256 224l-96-64M256 224l96-64M256 320l-80-48M256 320l80-48"
+    stroke="#000000" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="256" cy="128" r="36" fill="#000000"/>
+  <circle cx="160" cy="160" r="30" fill="#000000"/>
+  <circle cx="352" cy="160" r="30" fill="#000000"/>
+  <circle cx="176" cy="272" r="30" fill="#000000"/>
+  <circle cx="336" cy="272" r="30" fill="#000000"/>
+</svg>

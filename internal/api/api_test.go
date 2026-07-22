@@ -74,14 +74,15 @@ func newHarness(t *testing.T, script []fakeagent.Step) *harness {
 	hookTokens := NewHookTokens()
 
 	h := New(Config{
-		Tree:       tr,
-		Sessions:   mgr,
-		Store:      st,
-		Worktrees:  engine,
-		Auth:       NewAuth(testToken),
-		HookTokens: hookTokens,
-		Version:    "v-test",
-		Commit:     "commit-test",
+		Tree:          tr,
+		Sessions:      mgr,
+		Store:         st,
+		Worktrees:     engine,
+		Auth:          NewAuth(testToken),
+		HookTokens:    hookTokens,
+		Version:       "v-test",
+		Commit:        "commit-test",
+		PushPublicKey: testPushPublicKey,
 	})
 	ts := httptest.NewServer(h.Routes())
 	t.Cleanup(ts.Close)

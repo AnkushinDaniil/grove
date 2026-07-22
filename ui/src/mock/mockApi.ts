@@ -402,5 +402,23 @@ export async function createMockApiClient(): Promise<ApiClient> {
     async getNodeMemory(nodeId, scope) {
       return buildFixtureMemory(nodeId, scope ?? "self");
     },
+
+    // Web push has no in-memory "world" to mutate: the daemon-side
+    // subscription table doesn't exist in mock mode. The key is
+    // deliberately not a real 65-byte P-256 point -- see state/push.ts --
+    // so a stray click in `dev:mock` fails fast in PushManager.subscribe()
+    // instead of quietly registering a live subscription with a real
+    // browser push service.
+    async getPushKey() {
+      return { public_key: "mock-vapid-key-not-a-real-p256-point" };
+    },
+
+    async pushSubscribe() {
+      // No-op: nothing to persist against in mock mode.
+    },
+
+    async pushUnsubscribe() {
+      // No-op, mirrors pushSubscribe.
+    },
   };
 }

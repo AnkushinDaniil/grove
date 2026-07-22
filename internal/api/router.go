@@ -68,6 +68,12 @@ type Config struct {
 	// Memory backs GET /nodes/{id}/memory with MemPalace-recalled entries. Nil
 	// makes the endpoint report an unavailable backend (healthy:false).
 	Memory Memory
+
+	// PushPublicKey is the daemon's VAPID public key served at
+	// GET /push/key (see internal/push.GenerateOrLoadKeys). Empty leaves the
+	// endpoint reporting an empty key, which the UI treats as "push
+	// unavailable".
+	PushPublicKey string
 }
 
 // Orchestrator launches a node as a root orchestrator: a headless session with
@@ -89,12 +95,13 @@ type Handlers struct {
 	memory       Memory
 	logger       *slog.Logger
 
-	version     string
-	commit      string
-	home        func() (string, error)
-	profilesDir string
-	github      GitHubClient
-	git         *gitcli.Runner
+	version       string
+	commit        string
+	home          func() (string, error)
+	profilesDir   string
+	pushPublicKey string
+	github        GitHubClient
+	git           *gitcli.Runner
 
 	// stats caches computed GET /stats payloads for statsCacheTTL, keyed by
 	// scope+range, so repeated dashboard polls do not re-aggregate the DB.
@@ -121,22 +128,23 @@ func New(cfg Config) *Handlers {
 		gh = github.New()
 	}
 	return &Handlers{
-		tree:         cfg.Tree,
-		sessions:     cfg.Sessions,
-		store:        cfg.Store,
-		worktrees:    cfg.Worktrees,
-		auth:         cfg.Auth,
-		hookTokens:   cfg.HookTokens,
-		orchestrator: cfg.Orchestrator,
-		memory:       cfg.Memory,
-		logger:       logger,
-		version:      cfg.Version,
-		commit:       cfg.Commit,
-		home:         home,
-		profilesDir:  cfg.ProfilesDir,
-		github:       gh,
-		git:          gitcli.NewRunner(),
-		stats:        newStatsCache(statsCacheTTL),
+		tree:          cfg.Tree,
+		sessions:      cfg.Sessions,
+		store:         cfg.Store,
+		worktrees:     cfg.Worktrees,
+		auth:          cfg.Auth,
+		hookTokens:    cfg.HookTokens,
+		orchestrator:  cfg.Orchestrator,
+		memory:        cfg.Memory,
+		logger:        logger,
+		version:       cfg.Version,
+		commit:        cfg.Commit,
+		home:          home,
+		profilesDir:   cfg.ProfilesDir,
+		pushPublicKey: cfg.PushPublicKey,
+		github:        gh,
+		git:           gitcli.NewRunner(),
+		stats:         newStatsCache(statsCacheTTL),
 	}
 }
 
@@ -161,6 +169,10 @@ func (h *Handlers) Routes() http.Handler {
 	mux.HandleFunc("GET /api/v1/version", h.handleVersion)
 	mux.HandleFunc("GET /api/v1/usage", h.handleUsage)
 	mux.HandleFunc("GET /api/v1/stats", h.handleStats)
+
+	mux.HandleFunc("GET /api/v1/push/key", h.handlePushKey)
+	mux.HandleFunc("POST /api/v1/push/subscribe", h.handlePushSubscribe)
+	mux.HandleFunc("POST /api/v1/push/unsubscribe", h.handlePushUnsubscribe)
 
 	mux.HandleFunc("POST /api/v1/feedback", h.handleCreateFeedback)
 	mux.HandleFunc("GET /api/v1/feedback", h.handleListFeedback)

@@ -60,6 +60,60 @@ grove service install    # start the daemon at login (launchd on macOS,
 With the login service installed, clicking that icon is the whole story: the
 daemon is already running and the app opens instantly.
 
+## Remote access from your phone
+
+grove's daemon binds to `127.0.0.1` only, so by default it's reachable just
+from the machine it runs on. [Tailscale](https://tailscale.com) turns that
+into a private, authenticated tunnel to your phone with zero grove code:
+
+```sh
+tailscale serve 7433
+```
+
+This proxies the daemon over your tailnet at `https://<machine>.<tailnet>.ts.net`
+with a real, browser-trusted certificate — no grove configuration needed. The
+daemon token still gates every request; you're reaching the same
+authenticated daemon, just over a different network. The HTTPS origin also
+unlocks two things loopback HTTP can't:
+
+- **Push notifications** for attention alerts (permission prompts, questions,
+  errors, done) even with the tab closed — `GET/POST /api/v1/push/*`, see
+  [docs/API.md](docs/API.md#web-push-apiv1push). Open the UI once over the
+  tailnet URL and allow notifications when the browser prompts.
+- **Installable PWA** — *Safari: Share → Add to Home Screen* or *Chrome:
+  Install app* — so grove opens like a native app.
+
+grove's Host allowlist (a DNS-rebinding guard, `internal/server/middleware.go`)
+accepts your tailnet's `*.ts.net` hostname in addition to
+`127.0.0.1`/`localhost`, since `tailscale serve` proxies the original Host
+header through unchanged. This doesn't reopen the hole the check exists to
+close: Tailscale MagicDNS names under `.ts.net` are only ever issued to
+devices already admitted to your own tailnet, so nobody outside it can make
+an arbitrary `*.ts.net` name resolve to your loopback interface. Keep any
+allowlist change this narrow and documented — never a general CORS
+relaxation.
+
+### Troubleshooting checklist
+
+- [ ] `tailscale status` shows this machine and your phone on the same
+      tailnet, both `active`.
+- [ ] `tailscale serve status` shows `7433` proxied over `https`.
+- [ ] You're opening the `https://*.ts.net` URL Tailscale printed — not
+      `http://127.0.0.1:7433`, which stays loopback-only on purpose.
+- [ ] REST calls work (the UI loads, `GET /api/v1/version` responds) but the
+      tree/terminal views don't live-update over the tailnet → the WebSocket
+      upgrade has its own, separate origin allowlist
+      (`internal/ws/ws.go`'s `OriginPatterns`). It accepts `*.ts.net` for the
+      same reason the Host allowlist does, so live updates should work over
+      `tailscale serve`; if they don't, confirm the browser is actually
+      opening `wss://<machine>.<tailnet>.ts.net` (not a mixed-content
+      `ws://`) and that the tab's Origin is the tailnet URL.
+- [ ] Push subscribing succeeds (`POST /push/subscribe` → 204) but no
+      notification ever arrives → confirm the browser actually granted the
+      notification permission (check the site's settings), and that the
+      daemon (and the machine it runs on) is awake — grove only dispatches
+      pushes while `grove serve` is running.
+
 ## Architecture at a glance
 
 ```

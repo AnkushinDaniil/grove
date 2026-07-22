@@ -50,9 +50,22 @@ func New(cfg Config) *Handlers {
 		logger:        logger,
 		scrollbackDir: cfg.ScrollbackDir,
 		acceptOpts: &websocket.AcceptOptions{
-			// The request host is always authorized; these patterns additionally
-			// allow the loopback origins the daemon and the Vite dev proxy use.
-			OriginPatterns: []string{"127.0.0.1", "127.0.0.1:*", "localhost", "localhost:*"},
+			// The request host is always authorized (coder/websocket short-circuits
+			// same-origin upgrades); these patterns additionally allow the loopback
+			// origins the daemon and the Vite dev proxy use, plus Tailscale MagicDNS
+			// names so the tree/terminal sockets live-update over `tailscale serve`
+			// from a phone. The *.ts.net entry mirrors the Host allowlist's
+			// tailnetHostSuffix (internal/server/middleware.go) and rests on the same
+			// invariant: only devices already in the user's tailnet can originate a
+			// *.ts.net Origin, and the daemon token still gates every upgrade. It is
+			// needed for the case where `tailscale serve` rewrites the upstream Host
+			// to loopback while the browser Origin stays the *.ts.net name, which
+			// defeats the same-origin short-circuit above.
+			OriginPatterns: []string{
+				"127.0.0.1", "127.0.0.1:*",
+				"localhost", "localhost:*",
+				"*.ts.net", "*.ts.net:*",
+			},
 		},
 	}
 }
