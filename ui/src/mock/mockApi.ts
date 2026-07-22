@@ -16,8 +16,10 @@ import { reviewWorld } from "./reviewWorld";
 import { prReviewWorld } from "./prReviewWorld";
 import { worktreeReviewWorld } from "./worktreeReviewWorld";
 import { repoWorld } from "./repoWorld";
+import { profileWorld } from "./profileWorld";
 import { buildFixtureStats } from "./statsFixtures";
 import { feedbackWorld } from "./feedbackWorld";
+import { buildFixtureMemory } from "./memoryFixtures";
 
 function nowISO(): string {
   return new Date().toISOString();
@@ -365,6 +367,22 @@ export async function createMockApiClient(): Promise<ApiClient> {
       repoWorld.remove(repoId);
     },
 
+    async getProfiles() {
+      return { profiles: profileWorld.list() };
+    },
+
+    async addProfile(body) {
+      return profileWorld.add(body);
+    },
+
+    async deleteProfile(id) {
+      profileWorld.remove(id);
+    },
+
+    async profileDoctor(id) {
+      return profileWorld.doctor(id);
+    },
+
     async getStats(scope, range) {
       return buildFixtureStats(scope, range ?? "7d");
     },
@@ -379,6 +397,10 @@ export async function createMockApiClient(): Promise<ApiClient> {
 
     async resolveFeedback(id, fixNodeId) {
       return feedbackWorld.resolve(id, fixNodeId);
+    },
+
+    async getNodeMemory(nodeId, scope) {
+      return buildFixtureMemory(nodeId, scope ?? "self");
     },
   };
 }

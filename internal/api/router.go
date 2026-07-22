@@ -52,6 +52,10 @@ type Config struct {
 	// defaults to os.UserHomeDir.
 	Home func() (string, error)
 
+	// ProfilesDir is the root under which new profiles' config dirs default
+	// (<ProfilesDir>/<driver>/<name>). It is layout.Profiles on the daemon.
+	ProfilesDir string
+
 	// GitHub wraps the gh CLI for the Review Radar endpoints. Nil defaults to a
 	// client over the real gh binary; tests inject one backed by a fake runner.
 	GitHub GitHubClient
@@ -60,6 +64,10 @@ type Config struct {
 	// mounted (the tree-of-agents control plane). Nil leaves headless sessions
 	// plain — they run without the grove tools.
 	Orchestrator Orchestrator
+
+	// Memory backs GET /nodes/{id}/memory with MemPalace-recalled entries. Nil
+	// makes the endpoint report an unavailable backend (healthy:false).
+	Memory Memory
 }
 
 // Orchestrator launches a node as a root orchestrator: a headless session with
@@ -78,13 +86,15 @@ type Handlers struct {
 	auth         *Auth
 	hookTokens   *HookTokens
 	orchestrator Orchestrator
+	memory       Memory
 	logger       *slog.Logger
 
-	version string
-	commit  string
-	home    func() (string, error)
-	github  GitHubClient
-	git     *gitcli.Runner
+	version     string
+	commit      string
+	home        func() (string, error)
+	profilesDir string
+	github      GitHubClient
+	git         *gitcli.Runner
 
 	// stats caches computed GET /stats payloads for statsCacheTTL, keyed by
 	// scope+range, so repeated dashboard polls do not re-aggregate the DB.
@@ -118,10 +128,12 @@ func New(cfg Config) *Handlers {
 		auth:         cfg.Auth,
 		hookTokens:   cfg.HookTokens,
 		orchestrator: cfg.Orchestrator,
+		memory:       cfg.Memory,
 		logger:       logger,
 		version:      cfg.Version,
 		commit:       cfg.Commit,
 		home:         home,
+		profilesDir:  cfg.ProfilesDir,
 		github:       gh,
 		git:          gitcli.NewRunner(),
 		stats:        newStatsCache(statsCacheTTL),
@@ -142,6 +154,7 @@ func (h *Handlers) Routes() http.Handler {
 	mux.HandleFunc("POST /api/v1/nodes/{id}/prompt", h.handlePrompt)
 	mux.HandleFunc("POST /api/v1/sessions/{id}/stop", h.handleStopSession)
 	mux.HandleFunc("GET /api/v1/nodes/{id}/events", h.handleListEvents)
+	mux.HandleFunc("GET /api/v1/nodes/{id}/memory", h.handleNodeMemory)
 	mux.HandleFunc("GET /api/v1/nodes/{id}/resume-target", h.handleResumeTarget)
 	mux.HandleFunc("GET /api/v1/inbox", h.handleInbox)
 	mux.HandleFunc("GET /api/v1/fs/dirs", h.handleFsDirs)
@@ -169,6 +182,11 @@ func (h *Handlers) Routes() http.Handler {
 	mux.HandleFunc("GET /api/v1/projects/{id}/repos", h.handleListRepos)
 	mux.HandleFunc("POST /api/v1/projects/{id}/repos", h.handleCreateRepo)
 	mux.HandleFunc("DELETE /api/v1/repos/{id}", h.handleDeleteRepo)
+
+	mux.HandleFunc("GET /api/v1/profiles", h.handleListProfiles)
+	mux.HandleFunc("POST /api/v1/profiles", h.handleCreateProfile)
+	mux.HandleFunc("DELETE /api/v1/profiles/{id}", h.handleDeleteProfile)
+	mux.HandleFunc("GET /api/v1/profiles/{id}/doctor", h.handleProfileDoctor)
 
 	mux.HandleFunc("GET /api/v1/reviews/worktree", h.handleWorktreeReview)
 	mux.HandleFunc("GET /api/v1/reviews/worktree/comments", h.handleListWorktreeComments)

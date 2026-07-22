@@ -17,6 +17,7 @@ import { StartHeadlessPopover } from "./StartHeadlessPopover";
 import { TerminalTab } from "./tabs/TerminalTab";
 import { EventsTab } from "./tabs/EventsTab";
 import { ChildrenTab } from "./tabs/ChildrenTab";
+import { MemoryTab } from "./tabs/MemoryTab";
 import { ReviewTab } from "./worktreeReview/ReviewTab";
 import { RepoPanel } from "./repos/RepoPanel";
 import { EmptyState } from "../common/EmptyState";
@@ -24,12 +25,13 @@ import { FeedbackButton } from "../feedback/FeedbackButton";
 import { FeedbackComposer } from "../feedback/FeedbackComposer";
 import type { NodeID, SessionStatus } from "../../gen/types";
 
-type TabId = "terminal" | "events" | "children" | "review" | "repos";
+type TabId = "terminal" | "events" | "children" | "memory" | "review" | "repos";
 
 const BASE_TABS: { id: TabId; label: string }[] = [
   { id: "terminal", label: "Terminal" },
   { id: "events", label: "Events" },
   { id: "children", label: "Children" },
+  { id: "memory", label: "Memory" },
 ];
 
 function isSessionTerminal(status: SessionStatus): boolean {
@@ -217,6 +219,7 @@ export function NodeView() {
         )}
         {tab === "events" && <EventsTab nodeId={id} />}
         {tab === "children" && <ChildrenTab node={node} />}
+        {tab === "memory" && <MemoryTab nodeId={id} />}
         {tab === "repos" && node.kind === "project" && <RepoPanel projectId={node.id} />}
         {tab === "review" && hasWorktree && <ReviewTab node={node} onAddressed={() => setTab("terminal")} />}
       </div>

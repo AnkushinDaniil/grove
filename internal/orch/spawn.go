@@ -119,7 +119,7 @@ func (s *Scheduler) markSpawnFailed(ctx context.Context, childID core.NodeID, ca
 }
 
 // composeBriefing builds the node-context header for a spawned child's first
-// prompt from its place in the tree.
+// prompt from its place in the tree, injecting recalled memory when available.
 func (s *Scheduler) composeBriefing(id core.NodeID, role mcpserv.Role) string {
 	node, ok := s.tree.Get(id)
 	if !ok {
@@ -139,7 +139,21 @@ func (s *Scheduler) composeBriefing(id core.NodeID, role mcpserv.Role) string {
 		Depth:    depth,
 		Children: len(s.tree.Children(id)),
 		Limits:   s.limits,
+		Memory:   s.recall(id),
 	})
+}
+
+// recall fetches the node-scoped memory block for a spawn briefing (recall
+// injection, ORCHESTRATION.md §8). Empty when memory is disabled or nothing is
+// recalled; bounded internally so it cannot stall the spawn.
+func (s *Scheduler) recall(id core.NodeID) string {
+	if s.mem == nil {
+		return ""
+	}
+	s.mu.Lock()
+	ctx := s.runCtx
+	s.mu.Unlock()
+	return s.mem.Recall(ctx, id, recallBudgetBytes)
 }
 
 // pathOf renders a node's root-first title path and its depth (root = 0).

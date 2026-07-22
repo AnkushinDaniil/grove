@@ -29,6 +29,7 @@ func startOrchestration(
 	layout config.Layout,
 	tr *tree.Tree,
 	mgr *session.Manager,
+	mem orch.Memory,
 ) (*orch.Scheduler, error) {
 	groveBin, err := os.Executable()
 	if err != nil {
@@ -44,6 +45,7 @@ func startOrchestration(
 		SocketPath: socketPath,
 		GroveBin:   groveBin,
 		Logger:     logger,
+		Memory:     mem,
 	})
 	srv := mcpserv.New(mcpserv.Deps{
 		Tree:    tr,

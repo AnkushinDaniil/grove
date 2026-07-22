@@ -34,6 +34,12 @@ type BriefingParams struct {
 	Depth    int // node depth (root = 0)
 	Children int // current direct children
 	Limits   Limits
+
+	// Memory is an optional pre-rendered "## Memory" markdown block recalled from
+	// MemPalace for this node (ORCHESTRATION.md §8, recall injection). The orch
+	// scheduler fills it when composing a briefing; empty means no memory was
+	// recalled (backend down, nothing relevant) and the section is omitted.
+	Memory string
 }
 
 // ComposeBriefing builds the node-context header prepended to a node's first
@@ -58,6 +64,17 @@ func ComposeBriefing(p BriefingParams) string {
 	} else {
 		b.WriteString("Role: WORKER\n\n")
 		b.WriteString("Do the work yourself. Report progress at milestones with grove_report_progress. If you are blocked or need a decision, call grove_raise_attention. When finished, call grove_complete with a result summary — that is the only signal that marks you done.\n")
+	}
+	// Recall injection (ORCHESTRATION.md §8): append node-scoped memory recalled
+	// from MemPalace, so the agent starts with relevant prior decisions and
+	// gotchas even if it never queries memory itself. Empty when nothing was
+	// recalled; the block already carries its own "## Memory" heading.
+	if mem := strings.TrimSpace(p.Memory); mem != "" {
+		b.WriteString("\n")
+		b.WriteString(mem)
+		if !strings.HasSuffix(mem, "\n") {
+			b.WriteString("\n")
+		}
 	}
 	return b.String()
 }

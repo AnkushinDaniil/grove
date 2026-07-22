@@ -20,6 +20,7 @@ import (
 	"github.com/AnkushinDaniil/grove/internal/driver/gemini"
 	"github.com/AnkushinDaniil/grove/internal/driver/opencode"
 	"github.com/AnkushinDaniil/grove/internal/gitcli"
+	"github.com/AnkushinDaniil/grove/internal/memory"
 	"github.com/AnkushinDaniil/grove/internal/notify"
 	"github.com/AnkushinDaniil/grove/internal/server"
 	"github.com/AnkushinDaniil/grove/internal/session"
@@ -129,6 +130,7 @@ func buildServer(ctx context.Context, logger *slog.Logger, layout config.Layout,
 		HookCommand:   hookCmd,
 		DaemonURL:     daemonURL,
 		MintHookToken: hookTokens.Mint,
+		Profiles:      session.NewStoreProfileLookup(st),
 	})
 	// Revive interactive sessions whose tmux-hosted child outlived the previous
 	// daemon: MarkInterrupted flipped them to interrupted above, and Reattach
@@ -149,8 +151,20 @@ func buildServer(ctx context.Context, logger *slog.Logger, layout config.Layout,
 	// Keep as an interface so a failed/nil scheduler stays a nil interface
 	// (a nil *orch.Scheduler boxed in the interface would be non-nil and panic
 	// on call). A nil orchestrator makes headless sessions run plain.
+	// grove is a MemPalace MCP client for zero-touch memory (ORCHESTRATION.md §8):
+	// recall injection into spawn briefings, auto-capture on completion, and the
+	// node-memory REST endpoint. The client degrades gracefully when MemPalace is
+	// absent (every op reports unavailable rather than failing), so it is always
+	// constructed; writes made while it is down spool under the state dir and
+	// replay on the next healthy write.
+	mem := memory.NewClient(memory.Options{
+		Tree:      tr,
+		SpoolPath: filepath.Join(layout.Home, "spool", "memory.jsonl"),
+		Logger:    logger,
+	})
+
 	var orchestrator api.Orchestrator
-	if scheduler, oerr := startOrchestration(ctx, logger, layout, tr, mgr); oerr != nil {
+	if scheduler, oerr := startOrchestration(ctx, logger, layout, tr, mgr, mem); oerr != nil {
 		logger.Error("orchestration disabled", "err", oerr)
 	} else {
 		orchestrator = scheduler
@@ -167,9 +181,11 @@ func buildServer(ctx context.Context, logger *slog.Logger, layout config.Layout,
 		Auth:         auth,
 		HookTokens:   hookTokens,
 		Orchestrator: orchestrator,
+		Memory:       mem,
 		Logger:       logger,
 		Version:      version,
 		Commit:       commit,
+		ProfilesDir:  layout.Profiles,
 	})
 	wsHandlers := ws.New(ws.Config{
 		Tree:          tr,

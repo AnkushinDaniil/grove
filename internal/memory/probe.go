@@ -41,16 +41,8 @@ func (e Env) Probe(ctx context.Context) (ProbeReport, error) {
 }
 
 func (e Env) probe(ctx context.Context, timeout time.Duration) (ProbeReport, error) {
-	// MemPalace ≥3.6 ships a dedicated MCP server binary (`mempalace-mcp`);
-	// older builds exposed it as the `mcp` subcommand of the main CLI. Prefer
-	// the dedicated binary — spawning the CLI without it just EOFs.
-	var bin string
-	var args []string
-	if p, err := e.lookPath(MCPBinaryName); err == nil {
-		bin = p
-	} else if p, err := e.lookPath(BinaryName); err == nil {
-		bin, args = p, []string{"mcp"}
-	} else {
+	bin, args, err := e.mcpCommand()
+	if err != nil {
 		return ProbeReport{}, fmt.Errorf("cannot probe: %w", err)
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)

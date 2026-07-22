@@ -342,6 +342,51 @@ affects tasks created afterward. `DELETE /repos/{id}` is idempotent (204) and a
 than dropped, so those worktrees stay intact and reviewable while the repo
 disappears from the project's list (its name frees up for reuse).
 
+## Profiles (`/api/v1/profiles`)
+
+Provider accounts, each an isolated CLI config dir (`CLAUDE_CONFIG_DIR`,
+`CODEX_HOME`). A node's `profile_id` (inherited like `driver`) selects which
+account its sessions run under; the daemon points the spawned CLI at that
+profile's config dir and scrubs conflicting auth from the env.
+
+| Method & path | Body | Returns |
+|---|---|---|
+| `GET  /profiles` | — | `{profiles: [Profile]}` |
+| `POST /profiles` | `{driver, name, config_dir?}` | `Profile` (201) |
+| `DELETE /profiles/{id}` | — | 204 |
+| `GET  /profiles/{id}/doctor` | — | `{checks: [{name, ok, detail}]}` |
+
+```jsonc
+// Profile
+{ "id": "…", "driver": "claude", "name": "work", "config_dir": "/Users/…/.grove/profiles/claude/work",
+  "is_default": false, "created_at": "…" }
+```
+
+`config_dir` defaults to `~/.grove/profiles/<driver>/<name>`; the `default`
+profile (auto-created) adopts the CLI's own dir (`~/.claude`) untouched. Doctor
+probes: dir resolvable, credentials present, `ANTHROPIC_API_KEY` NOT in the
+profile's settings (it silently overrides subscription auth), the CLI runs
+under the profile env. Credentials are never read or stored by grove.
+
+## Node memory (`/api/v1/nodes/{id}/memory`)
+
+Read a node's MemPalace-backed memory (the daemon auto-captures decisions and
+distills them up the tree; agents also write via the curated MCP tools). This
+endpoint is for the UI's node memory tab.
+
+| Method & path | Body | Returns |
+|---|---|---|
+| `GET /nodes/{id}/memory?scope=self\|subtree\|ancestors` | — | `{entries: [MemoryEntry], backend, healthy}` |
+
+```jsonc
+// MemoryEntry
+{ "id": "…", "kind": "fact|decision|gotcha|convention", "content": "…",
+  "source": "auto|agent|user", "created_at": "…" }
+```
+
+`healthy` is false (with `backend:""`) when MemPalace is unavailable — the tab
+shows a "run `grove memory install`" hint rather than erroring.
+
 ## WebSocket `/ws/state` (JSON text frames, server-push)
 
 - On connect the server always sends

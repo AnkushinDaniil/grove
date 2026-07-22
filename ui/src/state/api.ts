@@ -6,17 +6,23 @@ import type {
   ArchiveResponse,
   CreateFeedbackRequest,
   CreateNodeRequest,
+  CreateProfileRequest,
   CreateRepoRequest,
   CreateSessionRequest,
   DirSuggestions,
+  DoctorResponse,
   DraftComment,
   Event,
   Feedback,
   FeedbackStatusFilter,
+  MemoryResponse,
+  MemoryScope,
   MergeWorktreeResponse,
   Node,
   NodeID,
   PatchNodeRequest,
+  Profile,
+  ProfilesResponse,
   PRReview,
   PromptRequest,
   ReplyToThreadRequest,
@@ -121,6 +127,16 @@ export interface ApiClient {
    *  existing task worktrees are untouched. */
   deleteRepo(repoId: string): Promise<void>;
 
+  // --- Profiles (/api/v1/profiles) ---
+  /** Provider accounts. Reading seeds the default claude profile on first run. */
+  getProfiles(): Promise<ProfilesResponse>;
+  addProfile(body: CreateProfileRequest): Promise<Profile>;
+  /** Idempotent; the default profile is re-seeded on the next getProfiles. */
+  deleteProfile(id: string): Promise<void>;
+  /** Health probes for one profile (config dir resolves, no API-key override,
+   *  the CLI runs under the profile env). */
+  profileDoctor(id: string): Promise<DoctorResponse>;
+
   // --- Stats (/api/v1/stats) ---
   /** Aggregated token/agent/flow/tool/feedback stats over a scope subtree
    *  (undefined scope = whole workspace) and a time range. */
@@ -132,6 +148,12 @@ export interface ApiClient {
   /** Marks feedback resolved, optionally linking the fix task node that
    *  closes the loop (see "Create fix task" in docs/API.md). */
   resolveFeedback(id: string, fixNodeId?: NodeID): Promise<Feedback>;
+
+  // --- Node memory (/api/v1/nodes/{id}/memory) ---
+  /** A node's MemPalace-backed memory in the given scope (default self).
+   *  Read-only; agents write memory via MCP. healthy:false means MemPalace is
+   *  unavailable -- the tab shows an install hint rather than erroring. */
+  getNodeMemory(nodeId: string, scope?: MemoryScope): Promise<MemoryResponse>;
 }
 
 function isErrorBody(v: unknown): v is { error: string } {
@@ -281,6 +303,14 @@ export const realApiClient: ApiClient = {
 
   deleteRepo: (repoId) => request(`/repos/${encodeURIComponent(repoId)}`, { method: "DELETE" }),
 
+  getProfiles: () => request("/profiles"),
+
+  addProfile: (body) => request("/profiles", { method: "POST", body: JSON.stringify(body) }),
+
+  deleteProfile: (id) => request(`/profiles/${encodeURIComponent(id)}`, { method: "DELETE" }),
+
+  profileDoctor: (id) => request(`/profiles/${encodeURIComponent(id)}/doctor`),
+
   getStats: (scope, range) => request(`/stats${qs({ scope, range })}`),
 
   listFeedback: (status) => request(`/feedback${qs({ status })}`),
@@ -292,6 +322,9 @@ export const realApiClient: ApiClient = {
       method: "POST",
       body: JSON.stringify({ fix_node_id: fixNodeId } satisfies ResolveFeedbackRequest),
     }),
+
+  getNodeMemory: (nodeId, scope) =>
+    request(`/nodes/${encodeURIComponent(nodeId)}/memory${qs({ scope })}`),
 };
 
 // Mock mode swaps in an in-memory client. The dynamic import keeps src/mock/

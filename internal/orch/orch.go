@@ -62,7 +62,38 @@ type Deps struct {
 	Now         func() time.Time
 	Debounce    time.Duration // wake debounce for non-urgent items (messages)
 	UrgentDelay time.Duration // coalescing delay for urgent items; 0 uses the default
+
+	// Memory is grove's optional MemPalace client (ORCHESTRATION.md §8, phase 2):
+	// it recalls node-scoped memory into spawn briefings and auto-captures
+	// completion summaries. Nil disables both, leaving orchestration unchanged.
+	Memory Memory
 }
+
+// Memory is the MemPalace-backed memory the scheduler drives without explicit
+// agent requests: recall injection at spawn and auto-capture on completion
+// (ORCHESTRATION.md §8). *memory.Client satisfies it; the interface keeps orch
+// decoupled from the memory package and testable with a fake.
+type Memory interface {
+	// Recall returns a bounded "## Memory" markdown block for a node's briefing,
+	// or "" when nothing is recalled. It must be quick — it runs while composing a
+	// spawn briefing.
+	Recall(ctx context.Context, nodeID core.NodeID, budgetBytes int) string
+	// Capture files a milestone entry for a node, best-effort and non-blocking.
+	Capture(ctx context.Context, nodeID core.NodeID, kind, content, source string)
+}
+
+// recallBudgetBytes bounds the memory block injected into a spawn briefing, so
+// recall never dominates the node-context header.
+const recallBudgetBytes = 2048
+
+// Memory kind/source strings the scheduler tags its auto-captures with. Kept as
+// local literals (not a memory-package import) so orch stays decoupled from the
+// backend; they must match the memory package's vocabulary.
+const (
+	memoryKindFact   = "fact"
+	memoryKindGotcha = "gotcha"
+	memorySourceAuto = "auto"
+)
 
 // Scheduler creates child nodes, launches their sessions, and wakes orchestrators
 // on subtree events. It is safe for concurrent use.
@@ -77,6 +108,7 @@ type Scheduler struct {
 	now      func() time.Time
 	debounce time.Duration
 	urgent   time.Duration
+	mem      Memory // MemPalace client; nil when memory is disabled
 
 	// runCtx bounds spawned sessions and wake turns to the scheduler's lifetime,
 	// not to the request or timer that triggered them. Set once by Run.
@@ -124,6 +156,7 @@ func New(d Deps) *Scheduler {
 		now:      d.Now,
 		debounce: d.Debounce,
 		urgent:   d.UrgentDelay,
+		mem:      d.Memory,
 		runCtx:   context.Background(), // replaced by Run; guards pre-Run spawns
 		seen:     make(map[core.NodeID]childState),
 		pending:  make(map[core.NodeID]*digest),
@@ -195,11 +228,12 @@ func (s *Scheduler) classify(n core.Node) {
 	st := s.seen[n.ID]
 	complete := s.isComplete(n)
 	var item digestItem
-	var fire bool
+	var fire, newlyComplete bool
 	switch {
 	case complete && !st.reported:
 		st.reported = true
 		fire = true
+		newlyComplete = true
 		item = digestItem{Kind: completionKind(n), Child: n.ID, Title: n.Title, Summary: completionSummary(n)}
 	case !complete && isActionableAttention(n.Attention) && n.Attention != st.attn:
 		fire = true
@@ -212,9 +246,37 @@ func (s *Scheduler) classify(n core.Node) {
 	if complete {
 		s.releaseLeaf(n.ID)
 	}
+	if newlyComplete {
+		// Auto-capture the completion/turn-done summary into the node's memory
+		// (ORCHESTRATION.md §8). The reported-once guard above dedupes it; the
+		// write itself is async and best-effort so a slow palace never stalls the
+		// delta loop.
+		s.captureCompletion(n)
+	}
 	if fire {
 		s.enqueue(n.ParentID, item, true)
 	}
+}
+
+// captureCompletion files a node's completion summary into MemPalace memory,
+// off the delta loop. A done node becomes a fact; a failure becomes a gotcha to
+// remember. No-op when memory is disabled or the summary is empty.
+func (s *Scheduler) captureCompletion(n core.Node) {
+	if s.mem == nil {
+		return
+	}
+	summary := completionSummary(n)
+	if summary == "" {
+		return
+	}
+	kind := memoryKindFact
+	if completionKind(n) == kindChildFailed {
+		kind = memoryKindGotcha
+	}
+	s.mu.Lock()
+	ctx := s.runCtx
+	s.mu.Unlock()
+	go s.mem.Capture(ctx, n.ID, kind, summary, memorySourceAuto)
 }
 
 // forget drops change-detection memory and any held slot for a gone node.

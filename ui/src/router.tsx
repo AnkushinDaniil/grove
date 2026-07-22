@@ -6,6 +6,7 @@ import { InboxView } from "./components/inbox/InboxView";
 import { ReviewsView } from "./components/reviews/ReviewsView";
 import { ReviewWorkspace } from "./components/reviewWorkspace/ReviewWorkspace";
 import { StatsView } from "./components/stats/StatsView";
+import { ProfilesView } from "./components/profiles/ProfilesView";
 
 export const router = createBrowserRouter([
   {
@@ -21,6 +22,7 @@ export const router = createBrowserRouter([
       { path: "review/:dir/:pr", element: <ReviewWorkspace /> },
       // Feedback lives inside StatsView as a second tab, not its own route.
       { path: "stats", element: <StatsView /> },
+      { path: "profiles", element: <ProfilesView /> },
     ],
   },
 ]);

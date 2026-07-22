@@ -60,6 +60,12 @@ type Config struct {
 	// when false, or without a scrollback dir, PTY sessions spawn directly as
 	// before. Headless sessions are unaffected.
 	UseTmux bool
+
+	// Profiles resolves a node's selected profile to its isolated CLI config dir,
+	// which the manager threads into the launch (rendered as CLAUDE_CONFIG_DIR /
+	// CODEX_HOME by the driver). Nil disables profile wiring: sessions run on the
+	// CLI's default config dir, the pre-profile behavior.
+	Profiles ProfileLookup
 }
 
 // LaunchOption mutates the driver LaunchSpec before the command is built. It is
@@ -193,6 +199,9 @@ func (m *Manager) Start(
 	}
 
 	spec := driver.LaunchSpec{Mode: mode, Prompt: prompt, ResumeID: resumeID, CWD: cwd}
+	if dir := m.profileConfigDir(ctx, resolved.ProfileID); dir != "" {
+		spec.Profile.ConfigDir = dir
+	}
 	for _, opt := range opts {
 		opt(&spec)
 	}

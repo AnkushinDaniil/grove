@@ -549,6 +549,43 @@ export interface ReposResponse {
   repos: Repo[];
 }
 
+// --- Profiles (/api/v1/profiles) ---
+
+// A provider account: an isolated CLI config dir (CLAUDE_CONFIG_DIR/CODEX_HOME)
+// selected per node via profile_id (inherited like driver). The `default`
+// profile is auto-created and adopts the CLI's own dir (~/.claude) untouched;
+// config_dir otherwise defaults to ~/.grove/profiles/<driver>/<name>.
+export interface Profile {
+  id: ProfileID;
+  driver: string;
+  name: string;
+  config_dir: string;
+  is_default: boolean;
+  created_at: string;
+}
+
+export interface CreateProfileRequest {
+  driver: string;
+  name: string;
+  config_dir?: string;
+}
+
+export interface ProfilesResponse {
+  profiles: Profile[];
+}
+
+// One GET /profiles/{id}/doctor probe: a named health check plus its outcome
+// and a human-readable detail (the resolved path, the reason it failed, ...).
+export interface DoctorCheck {
+  name: string;
+  ok: boolean;
+  detail: string;
+}
+
+export interface DoctorResponse {
+  checks: DoctorCheck[];
+}
+
 // --- Stats (/api/v1/stats, draft -- additive evolution allowed) ---
 
 export type StatsRange = "24h" | "7d" | "30d";
@@ -701,6 +738,34 @@ export interface CreateFeedbackRequest {
 
 export interface ResolveFeedbackRequest {
   fix_node_id?: NodeID;
+}
+
+// --- Node memory (/api/v1/nodes/{id}/memory) ---
+
+// Which slice of a node's tree lineage a memory query covers: the node itself,
+// its subtree, or its ancestor chain up to the project that anchors its wing.
+export type MemoryScope = "self" | "subtree" | "ancestors";
+
+// How a memory item is classified (for the UI) and who filed it.
+export type MemoryKind = "fact" | "decision" | "gotcha" | "convention";
+export type MemorySource = "auto" | "agent" | "user";
+
+// One MemPalace-backed memory item mapped into grove's vocabulary. created_at is
+// MemPalace's ISO 8601 string (it may lack a timezone).
+export interface MemoryEntry {
+  id: string;
+  kind: MemoryKind;
+  content: string;
+  source: MemorySource;
+  created_at: string;
+}
+
+// GET /nodes/{id}/memory. healthy is false with backend:"" when MemPalace is
+// unavailable -- the tab shows a "run `grove memory install`" hint, not an error.
+export interface MemoryResponse {
+  entries: MemoryEntry[];
+  backend: string;
+  healthy: boolean;
 }
 
 // --- WebSocket /ws/state (JSON text frames, server-push) ---
