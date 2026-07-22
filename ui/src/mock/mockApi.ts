@@ -14,6 +14,7 @@ import { buildFixtureUsage } from "./fixtures";
 import { suggestDirsMock } from "./fakeFs";
 import { reviewWorld } from "./reviewWorld";
 import { prReviewWorld } from "./prReviewWorld";
+import { worktreeReviewWorld } from "./worktreeReviewWorld";
 
 function nowISO(): string {
   return new Date().toISOString();
@@ -272,6 +273,75 @@ export async function createMockApiClient(): Promise<ApiClient> {
 
     async replyToThread(req) {
       prReviewWorld.reply(req);
+    },
+
+    async getWorktreeReview(node, repo) {
+      return worktreeReviewWorld.getReview(node, repo);
+    },
+
+    async getWorktreeComments(node, repo) {
+      return { comments: worktreeReviewWorld.getComments(node, repo) };
+    },
+
+    async addWorktreeComment(body) {
+      return worktreeReviewWorld.addComment(body);
+    },
+
+    async deleteWorktreeComment(id) {
+      worktreeReviewWorld.removeComment(id);
+    },
+
+    async mergeWorktree(node, repo) {
+      const existing = requireNode(node);
+      const result = worktreeReviewWorld.merge(node, repo);
+      // Mirrors the real merge closing the "needs review" loop -- clears the
+      // node's review attention the same way ackNode does, so the tree
+      // rail/inbox badge disappears once there's nothing left to review.
+      if (result.merged && existing.attention === "review") {
+        world.publish({
+          nodes: [{ ...existing, attention: "none", attention_reason: "", attention_since: undefined, updated_at: nowISO() }],
+        });
+      }
+      return result;
+    },
+
+    async addressWorktree(node, repo) {
+      const existing = requireNode(node);
+      const comments = worktreeReviewWorld.getComments(node, repo);
+      const now = nowISO();
+      const id = world.nextId("sess");
+      const session: Session = {
+        id,
+        node_id: node,
+        driver: existing.driver || "claude",
+        profile_id: existing.profile_id,
+        mode: "pty",
+        driver_session_id: `claude-mock-${id}`,
+        status: "starting",
+        cwd: existing.workspace_dir || "~/.grove/worktrees/mock",
+        started_at: now,
+      };
+      // Echoed as a "user" text event, same convention as sendPrompt (see
+      // API.md's clarification), so the node's Terminal/Events tabs show
+      // what the agent was asked to fix instead of a blank new session.
+      const promptLines = [
+        "Please address the following review comments in this worktree:",
+        "",
+        ...comments.map((c) => `- ${c.path}:${c.line} (${c.side}): "${c.body}"`),
+      ];
+      const echo: Event = {
+        id: world.nextId("evt"),
+        node_id: node,
+        session_id: id,
+        type: "text",
+        payload: { text: promptLines.join("\n"), final: true, role: "user" },
+        requires_attention: false,
+        created_at: now,
+      };
+      const updatedNode: Node = { ...existing, status: "starting", current_session_id: id, updated_at: now };
+      world.publish({ nodes: [updatedNode], sessions: [session], events: [echo] });
+      startMockSessionLifecycle(id, node);
+      return session;
     },
   };
 }

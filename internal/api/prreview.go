@@ -71,13 +71,16 @@ type prReviewDTO struct {
 }
 
 type fileDTO struct {
-	Path      string    `json:"path"`
-	OldPath   string    `json:"old_path"`
-	Status    string    `json:"status"`
-	Additions int       `json:"additions"`
-	Deletions int       `json:"deletions"`
-	Binary    bool      `json:"binary"`
-	Hunks     []hunkDTO `json:"hunks"`
+	Path            string    `json:"path"`
+	OldPath         string    `json:"old_path"`
+	Status          string    `json:"status"`
+	Additions       int       `json:"additions"`
+	Deletions       int       `json:"deletions"`
+	Binary          bool      `json:"binary"`
+	OriginalContent string    `json:"original_content"`
+	ModifiedContent string    `json:"modified_content"`
+	ContentOmitted  string    `json:"content_omitted"`
+	Hunks           []hunkDTO `json:"hunks"`
 }
 
 type hunkDTO struct {
@@ -158,13 +161,16 @@ func fileToDTO(f github.PRFile) fileDTO {
 		hunks = append(hunks, hunkDTO{Header: hk.Header, Lines: lines})
 	}
 	return fileDTO{
-		Path:      f.Path,
-		OldPath:   f.OldPath,
-		Status:    f.Status,
-		Additions: f.Additions,
-		Deletions: f.Deletions,
-		Binary:    f.Binary,
-		Hunks:     hunks,
+		Path:            f.Path,
+		OldPath:         f.OldPath,
+		Status:          f.Status,
+		Additions:       f.Additions,
+		Deletions:       f.Deletions,
+		Binary:          f.Binary,
+		OriginalContent: f.OriginalContent,
+		ModifiedContent: f.ModifiedContent,
+		ContentOmitted:  f.ContentOmitted,
+		Hunks:           hunks,
 	}
 }
 
@@ -321,7 +327,8 @@ type aiDraftRequest struct {
 
 // handleAIDraft runs a headless claude over the PR context and returns editable
 // suggested review text. The human always reviews it before it becomes a draft
-// or reply.
+// or reply. Worktree review reuses this endpoint with pr=0 and the worktree path
+// as dir, grounding the prompt in the local diff instead of a PR's.
 func (h *Handlers) handleAIDraft(w http.ResponseWriter, r *http.Request) {
 	var req aiDraftRequest
 	if err := decodeJSON(w, r, &req); err != nil {
@@ -332,25 +339,19 @@ func (h *Handlers) handleAIDraft(w http.ResponseWriter, r *http.Request) {
 		writeErrorStatus(w, h.logger, http.StatusBadRequest, "dir must be an absolute path")
 		return
 	}
-	if req.PR <= 0 {
-		writeErrorStatus(w, h.logger, http.StatusBadRequest, "pr must be a positive pull request number")
+	if req.PR < 0 {
+		writeErrorStatus(w, h.logger, http.StatusBadRequest, "pr must not be negative")
 		return
 	}
 	if req.Kind != "comment" && req.Kind != "reply" {
 		writeErrorStatus(w, h.logger, http.StatusBadRequest, "kind must be comment or reply")
 		return
 	}
-	gh, ok := h.prGitHub()
+
+	prompt, ok := h.aiDraftPrompt(w, r, req)
 	if !ok {
-		writeErrorStatus(w, h.logger, http.StatusInternalServerError, "github client does not support PR review")
 		return
 	}
-	detail, err := gh.PRDetail(r.Context(), req.Dir, req.PR)
-	if err != nil {
-		h.writeGHError(w, err)
-		return
-	}
-	prompt := buildAIDraftPrompt(req, detail)
 
 	drafter := h.aiDrafter
 	if drafter == nil {
@@ -362,6 +363,28 @@ func (h *Handlers) handleAIDraft(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, h.logger, http.StatusOK, map[string]string{"text": strings.TrimSpace(text)})
+}
+
+// aiDraftPrompt builds the drafting prompt for one request. When pr==0 the diff
+// context comes from the local worktree (dir) via git; otherwise it comes from
+// the PR's assembled diff via gh. It writes the appropriate error response and
+// returns ok=false on failure.
+func (h *Handlers) aiDraftPrompt(w http.ResponseWriter, r *http.Request, req aiDraftRequest) (string, bool) {
+	if req.PR == 0 {
+		diff := h.localDiffForPath(r.Context(), req.Dir, req.Path)
+		return buildWorktreeDraftPrompt(req, diff), true
+	}
+	gh, ok := h.prGitHub()
+	if !ok {
+		writeErrorStatus(w, h.logger, http.StatusInternalServerError, "github client does not support PR review")
+		return "", false
+	}
+	detail, err := gh.PRDetail(r.Context(), req.Dir, req.PR)
+	if err != nil {
+		h.writeGHError(w, err)
+		return "", false
+	}
+	return buildAIDraftPrompt(req, detail), true
 }
 
 type submitRequest struct {

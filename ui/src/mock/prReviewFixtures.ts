@@ -1,4 +1,4 @@
-import type { DiffHunk, PRReview } from "../gen/types";
+import type { PRReview } from "../gen/types";
 import { ago, HOUR } from "./fixtures";
 import { NETHERMIND_DIR, REVIEW_LOGIN } from "./reviewFixtures";
 
@@ -11,9 +11,232 @@ import { NETHERMIND_DIR, REVIEW_LOGIN } from "./reviewFixtures";
 export const HERO_PR_DIR = NETHERMIND_DIR;
 export const HERO_PR_NUMBER = 12540;
 
-function hunk(header: string, lines: DiffHunk["lines"]): DiffHunk {
-  return { header, lines };
+const ORIGINAL_TX_POOL_CS = `using System;
+using Nethermind.Core;
+using Nethermind.Core.Crypto;
+using Nethermind.Logging;
+
+namespace Nethermind.TxPool
+{
+    public class TxPool : ITxPool
+    {
+        private readonly ILogger _logger;
+        private readonly HashSet<Keccak> _hashCache = new();
+        private readonly int _maxPendingNonceGap;
+
+        public TxPool(ILogManager logManager, int maxPendingNonceGap)
+        {
+            _logger = logManager.GetClassLogger();
+            _maxPendingNonceGap = maxPendingNonceGap;
+        }
+
+        public AcceptTxResult Insert(Transaction tx, TxHandlingOptions handlingOptions)
+        {
+            UInt256 accountNonce = GetAccountNonce(tx.SenderAddress);
+
+            if (tx.Nonce < accountNonce)
+            {
+                return AcceptTxResult.OldNonce;
+            }
+
+            if (tx.Nonce > accountNonce + _maxPendingNonceGap)
+            {
+                return AcceptTxResult.NonceGapTooWide;
+            }
+
+            _pending.Add(tx.Hash, tx);
+            return AcceptTxResult.Accepted;
+        }
+
+        private bool IsKnown(Keccak hash)
+        {
+            return _hashCache.Contains(hash);
+        }
+
+        private UInt256 GetAccountNonce(Address address)
+        {
+            return _stateReader.GetNonce(address);
+        }
+    }
 }
+`;
+
+const MODIFIED_TX_POOL_CS = `using System;
+using Nethermind.Core;
+using Nethermind.Core.Crypto;
+using Nethermind.Logging;
+
+namespace Nethermind.TxPool
+{
+    public class TxPool : ITxPool
+    {
+        private readonly ILogger _logger;
+        private readonly HashSet<Keccak> _hashCache = new();
+        private readonly int _maxPendingNonceGap;
+
+        public TxPool(ILogManager logManager, int maxPendingNonceGap)
+        {
+            _logger = logManager.GetClassLogger();
+            _maxPendingNonceGap = maxPendingNonceGap;
+        }
+
+        public AcceptTxResult Insert(Transaction tx, TxHandlingOptions handlingOptions)
+        {
+            UInt256 accountNonce = GetAccountNonce(tx.SenderAddress);
+
+            if (tx.Nonce < accountNonce)
+            {
+                if (_logger.IsTrace) _logger.Trace($"Skipping tx {tx.Hash}: nonce {tx.Nonce} < account nonce {accountNonce}");
+                return AcceptTxResult.OldNonce;
+            }
+
+            if (tx.Nonce > accountNonce + _maxPendingNonceGap)
+            {
+                return AcceptTxResult.NonceGapTooWide;
+            }
+
+            _pending.Add(tx.Hash, tx);
+            return AcceptTxResult.Accepted;
+        }
+
+        private bool IsKnown(Keccak hash)
+        {
+            if (hash is null)
+            {
+                throw new ArgumentNullException(nameof(hash));
+            }
+
+            return _hashCache.Contains(hash);
+        }
+
+        private UInt256 GetAccountNonce(Address address)
+        {
+            return _stateReader.GetNonce(address);
+        }
+    }
+}
+`;
+
+const ORIGINAL_TX_POOL_TESTS_CS = `using NUnit.Framework;
+using FluentAssertions;
+using Nethermind.Core.Test.Builders;
+
+namespace Nethermind.TxPool.Test
+{
+    [TestFixture]
+    public class TxPoolTests
+    {
+        [Test]
+        public void Insert_accepts_valid_nonce()
+        {
+            TxPool pool = CreatePool();
+            Address account = TestItem.AddressA;
+            EnsureSenderBalance(account, 1.Ether());
+            SetAccountNonce(account, 5);
+
+            Transaction tx = Build.A.Transaction.WithNonce(5).SignedAndResolved().TestObject;
+            AcceptTxResult result = pool.SubmitTx(tx, TxHandlingOptions.None);
+
+            result.Should().Be(AcceptTxResult.Accepted);
+        }
+
+        [Test]
+        public void Insert_rejects_nonce_gap_too_wide()
+        {
+            TxPool pool = CreatePool();
+            Address account = TestItem.AddressA;
+            EnsureSenderBalance(account, 1.Ether());
+            SetAccountNonce(account, 5);
+
+            Transaction tx = Build.A.Transaction.WithNonce(500).SignedAndResolved().TestObject;
+            AcceptTxResult result = pool.SubmitTx(tx, TxHandlingOptions.None);
+
+            result.Should().Be(AcceptTxResult.NonceGapTooWide);
+        }
+    }
+}
+`;
+
+const MODIFIED_TX_POOL_TESTS_CS = `using NUnit.Framework;
+using FluentAssertions;
+using Nethermind.Core.Test.Builders;
+
+namespace Nethermind.TxPool.Test
+{
+    [TestFixture]
+    public class TxPoolTests
+    {
+        [Test]
+        public void Insert_rejects_stale_nonce_and_logs_reason()
+        {
+            TxPool pool = CreatePool();
+            Address account = TestItem.AddressA;
+            EnsureSenderBalance(account, 1.Ether());
+            SetAccountNonce(account, 5);
+
+            Transaction tx = Build.A.Transaction.WithNonce(3).SignedAndResolved().TestObject;
+            AcceptTxResult result = pool.SubmitTx(tx, TxHandlingOptions.None);
+
+            result.Should().Be(AcceptTxResult.OldNonce);
+            _logger.TraceEntries.Should().ContainSingle(e => e.Contains("nonce 3"));
+        }
+
+        [Test]
+        public void Insert_accepts_valid_nonce()
+        {
+            TxPool pool = CreatePool();
+            Address account = TestItem.AddressA;
+            EnsureSenderBalance(account, 1.Ether());
+            SetAccountNonce(account, 5);
+
+            Transaction tx = Build.A.Transaction.WithNonce(5).SignedAndResolved().TestObject;
+            AcceptTxResult result = pool.SubmitTx(tx, TxHandlingOptions.None);
+
+            result.Should().Be(AcceptTxResult.Accepted);
+        }
+
+        [Test]
+        public void Insert_rejects_nonce_gap_too_wide()
+        {
+            TxPool pool = CreatePool();
+            Address account = TestItem.AddressA;
+            EnsureSenderBalance(account, 1.Ether());
+            SetAccountNonce(account, 5);
+
+            Transaction tx = Build.A.Transaction.WithNonce(500).SignedAndResolved().TestObject;
+            AcceptTxResult result = pool.SubmitTx(tx, TxHandlingOptions.None);
+
+            result.Should().Be(AcceptTxResult.NonceGapTooWide);
+        }
+    }
+}
+`;
+
+const ORIGINAL_TX_POOL_CONFIG_CS = `namespace Nethermind.TxPool
+{
+    public class TxPoolConfig : ITxPoolConfig
+    {
+        public int GasLimit { get; set; } = 10_000_000;
+
+        public int Size { get; set; } = 2048;
+
+        public bool BlobsSupport { get; set; } = true;
+    }
+}
+`;
+
+const MODIFIED_TX_POOL_CONFIG_CS = `namespace Nethermind.TxPool
+{
+    public class TxPoolConfig : ITxPoolConfig
+    {
+        public int GasLimit { get; set; } = 10_000_000;
+
+        public int Size { get; set; } = 4096;
+
+        public bool BlobsSupport { get; set; } = true;
+    }
+}
+`;
 
 export function buildHeroPRReview(): PRReview {
   return {
@@ -34,91 +257,24 @@ export function buildHeroPRReview(): PRReview {
       {
         path: "src/Nethermind/Nethermind.TxPool/TxPool.cs",
         status: "modified",
-        additions: 7,
-        deletions: 3,
+        additions: 6,
+        deletions: 0,
         binary: false,
-        hunks: [
-          hunk(
-            "@@ -142,7 +142,11 @@ public AcceptTxResult Insert(Transaction tx, TxHandlingOptions handlingOptions)",
-            [
-              { op: " ", old_line: 142, new_line: 142, text: "        {" },
-              { op: " ", old_line: 143, new_line: 143, text: "            if (tx.Nonce < accountNonce)" },
-              { op: "-", old_line: 144, new_line: 0, text: "            {" },
-              { op: "-", old_line: 145, new_line: 0, text: "                return AcceptTxResult.OldNonce;" },
-              { op: "-", old_line: 146, new_line: 0, text: "            }" },
-              { op: "+", old_line: 0, new_line: 144, text: "            {" },
-              {
-                op: "+",
-                old_line: 0,
-                new_line: 145,
-                text: '                if (_logger.IsTrace) _logger.Trace($"Skipping tx {tx.Hash}: nonce {tx.Nonce} < account nonce {accountNonce}");',
-              },
-              { op: "+", old_line: 0, new_line: 146, text: "                return AcceptTxResult.OldNonce;" },
-              { op: "+", old_line: 0, new_line: 147, text: "            }" },
-              { op: " ", old_line: 147, new_line: 148, text: "" },
-              {
-                op: " ",
-                old_line: 148,
-                new_line: 149,
-                text: "            if (tx.Nonce > accountNonce + _maxPendingNonceGap)",
-              },
-            ],
-          ),
-          hunk("@@ -210,6 +214,7 @@ private bool IsKnown(Keccak hash)", [
-            { op: " ", old_line: 210, new_line: 214, text: "        {" },
-            { op: " ", old_line: 211, new_line: 215, text: "            if (hash is null)" },
-            { op: "+", old_line: 0, new_line: 216, text: "            {" },
-            { op: "+", old_line: 0, new_line: 217, text: "                throw new ArgumentNullException(nameof(hash));" },
-            { op: "+", old_line: 0, new_line: 218, text: "            }" },
-            { op: " ", old_line: 212, new_line: 219, text: "" },
-            { op: " ", old_line: 213, new_line: 220, text: "            return _hashCache.Contains(hash);" },
-          ]),
-        ],
+        original_content: ORIGINAL_TX_POOL_CS,
+        modified_content: MODIFIED_TX_POOL_CS,
+        content_omitted: "",
+        hunks: [],
       },
       {
         path: "src/Nethermind/Nethermind.TxPool.Test/TxPoolTests.cs",
         status: "modified",
-        additions: 15,
+        additions: 14,
         deletions: 0,
         binary: false,
-        hunks: [
-          hunk("@@ -88,6 +88,21 @@ public class TxPoolTests", [
-            { op: " ", old_line: 88, new_line: 88, text: "        }" },
-            { op: " ", old_line: 89, new_line: 89, text: "" },
-            { op: "+", old_line: 0, new_line: 90, text: "        [Test]" },
-            { op: "+", old_line: 0, new_line: 91, text: "        public void Insert_rejects_stale_nonce_and_logs_reason()" },
-            { op: "+", old_line: 0, new_line: 92, text: "        {" },
-            { op: "+", old_line: 0, new_line: 93, text: "            TxPool pool = CreatePool();" },
-            { op: "+", old_line: 0, new_line: 94, text: "            Address account = TestItem.AddressA;" },
-            { op: "+", old_line: 0, new_line: 95, text: "            EnsureSenderBalance(account, 1.Ether());" },
-            { op: "+", old_line: 0, new_line: 96, text: "            SetAccountNonce(account, 5);" },
-            { op: "+", old_line: 0, new_line: 97, text: "" },
-            {
-              op: "+",
-              old_line: 0,
-              new_line: 98,
-              text: "            Transaction tx = Build.A.Transaction.WithNonce(3).SignedAndResolved().TestObject;",
-            },
-            {
-              op: "+",
-              old_line: 0,
-              new_line: 99,
-              text: "            AcceptTxResult result = pool.SubmitTx(tx, TxHandlingOptions.None);",
-            },
-            { op: "+", old_line: 0, new_line: 100, text: "" },
-            { op: "+", old_line: 0, new_line: 101, text: "            result.Should().Be(AcceptTxResult.OldNonce);" },
-            {
-              op: "+",
-              old_line: 0,
-              new_line: 102,
-              text: '            _logger.TraceEntries.Should().ContainSingle(e => e.Contains("nonce 3"));',
-            },
-            { op: "+", old_line: 0, new_line: 103, text: "        }" },
-            { op: "+", old_line: 0, new_line: 104, text: "" },
-            { op: " ", old_line: 90, new_line: 105, text: "        [Test]" },
-            { op: " ", old_line: 91, new_line: 106, text: "        public void Insert_accepts_valid_nonce()" },
-          ]),
-        ],
+        original_content: ORIGINAL_TX_POOL_TESTS_CS,
+        modified_content: MODIFIED_TX_POOL_TESTS_CS,
+        content_omitted: "",
+        hunks: [],
       },
       {
         path: "src/Nethermind/Nethermind.TxPool/TxPoolConfig.cs",
@@ -126,23 +282,18 @@ export function buildHeroPRReview(): PRReview {
         additions: 1,
         deletions: 1,
         binary: false,
-        hunks: [
-          hunk("@@ -18,7 +18,7 @@ public class TxPoolConfig : ITxPoolConfig", [
-            { op: " ", old_line: 18, new_line: 18, text: "        public int GasLimit { get; set; } = 10_000_000;" },
-            { op: " ", old_line: 19, new_line: 19, text: "" },
-            { op: "-", old_line: 20, new_line: 0, text: "        public int Size { get; set; } = 2048;" },
-            { op: "+", old_line: 0, new_line: 20, text: "        public int Size { get; set; } = 4096;" },
-            { op: " ", old_line: 21, new_line: 21, text: "" },
-            { op: " ", old_line: 22, new_line: 22, text: "        public bool BlobsSupport { get; set; } = true;" },
-          ]),
-        ],
+        original_content: ORIGINAL_TX_POOL_CONFIG_CS,
+        modified_content: MODIFIED_TX_POOL_CONFIG_CS,
+        content_omitted: "",
+        hunks: [],
       },
     ],
     threads: [
       {
         id: "PRRT_hero_1",
         path: "src/Nethermind/Nethermind.TxPool/TxPool.cs",
-        line: 146,
+        // Anchored to `return AcceptTxResult.OldNonce;` in MODIFIED_TX_POOL_CS.
+        line: 27,
         side: "RIGHT",
         is_resolved: false,
         diff_hunk:
@@ -162,7 +313,8 @@ export function buildHeroPRReview(): PRReview {
       {
         id: "PRRT_hero_2",
         path: "src/Nethermind/Nethermind.TxPool/TxPool.cs",
-        line: 217,
+        // Anchored to `throw new ArgumentNullException(nameof(hash));` in MODIFIED_TX_POOL_CS.
+        line: 43,
         side: "RIGHT",
         is_resolved: true,
         diff_hunk:

@@ -261,6 +261,60 @@ those drafts. `reply` posts to an existing thread (GraphQL
 `addPullRequestReviewThreadReply`, `resolveReviewThread` when `resolve`).
 Drafts persist in a `review_drafts` table keyed by (dir, pr).
 
+## Diff content for rich rendering (Pierre)
+
+The UI renders diffs with `@pierre/diffs`, which needs full before/after file
+contents (not patches). Both PR review and worktree review supply per file:
+
+```jsonc
+// PRReviewFile / WorktreeFile content fields (added to the existing file shape)
+{
+  "path": "src/…", "old_path": "…", "status": "modified|added|removed|renamed",
+  "additions": 0, "deletions": 0, "binary": false,
+  "original_content": "…full base file text… (\"\" for added/binary/omitted)",
+  "modified_content": "…full head/working file text… (\"\" for removed/binary/omitted)",
+  "content_omitted": "" ,   // "" | "binary" | "too_large"
+  "hunks": [ … ]            // kept as a fallback; Pierre computes its own diff
+}
+```
+
+Files over ~512 KB or binary set `content_omitted` and leave the contents empty
+(the UI shows a "view on GitHub / open in editor" placeholder).
+
+## Worktree review (`/api/v1/reviews/worktree`)
+
+Review the changes an agent made in a task node's worktree BEFORE opening a PR
+or merging — grove's own loop (worktree per task → review → merge/PR). Same
+diff+comment surface as PR review, but the diff is local (git) and comments are
+local notes that can drive a fix session or a batch PR review later.
+
+| Method & path | Body | Returns |
+|---|---|---|
+| `GET  /reviews/worktree?node=&repo=` | — | `WorktreeReview` |
+| `GET  /reviews/worktree/comments?node=&repo=` | — | `{comments: [WorktreeComment]}` |
+| `POST /reviews/worktree/comments` | `{node, repo, path, line, side, body}` | `WorktreeComment` (201) |
+| `DELETE /reviews/worktree/comments/{id}` | — | 204 |
+| `POST /reviews/worktree/merge` | `{node, repo}` | `{merged, message}` |
+| `POST /reviews/worktree/address` | `{node, repo}` | `Session` (201) — starts a session prompted with the comments |
+
+```jsonc
+// WorktreeReview
+{
+  "node_id": "…", "repo": "nethermind", "worktree_path": "…", "branch": "grove/…",
+  "base_ref": "master", "has_uncommitted": true,
+  "files": [ WorktreeFile ]     // same content-bearing shape as PRReviewFile above
+}
+// WorktreeComment — a local review note keyed to (node, repo, path, line).
+{ "id": "…", "node_id": "…", "repo": "…", "path": "…", "line": 42, "side": "RIGHT", "body": "…", "created_at": "…" }
+```
+
+`GET /reviews/worktree` diffs the worktree's working tree against its
+merge-base with `base_ref` (all the agent's changes, committed + uncommitted).
+`address` composes the comments into a prompt and starts a PTY session on the
+node so the agent fixes them; `merge` squash-merges the worktree into its
+parent (a clean tree required). `ai-draft` (the PR endpoint) is reused for
+worktree comments by passing the worktree path as `dir` and `pr: 0`.
+
 ## WebSocket `/ws/state` (JSON text frames, server-push)
 
 - On connect the server always sends

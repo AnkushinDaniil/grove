@@ -17,12 +17,13 @@ import { StartHeadlessPopover } from "./StartHeadlessPopover";
 import { TerminalTab } from "./tabs/TerminalTab";
 import { EventsTab } from "./tabs/EventsTab";
 import { ChildrenTab } from "./tabs/ChildrenTab";
+import { ReviewTab } from "./worktreeReview/ReviewTab";
 import { EmptyState } from "../common/EmptyState";
 import type { NodeID, SessionStatus } from "../../gen/types";
 
-type TabId = "terminal" | "events" | "children";
+type TabId = "terminal" | "events" | "children" | "review";
 
-const TABS: { id: TabId; label: string }[] = [
+const BASE_TABS: { id: TabId; label: string }[] = [
   { id: "terminal", label: "Terminal" },
   { id: "events", label: "Events" },
   { id: "children", label: "Children" },
@@ -78,6 +79,8 @@ export function NodeView() {
 
   const session = node.current_session_id ? sessionsById[node.current_session_id] : undefined;
   const activeSession = session && !isSessionTerminal(session.status) ? session : undefined;
+  const hasWorktree = node.kind === "task" && node.workspace_dir !== "";
+  const tabs = hasWorktree ? [...BASE_TABS, { id: "review" as const, label: "Review" }] : BASE_TABS;
 
   // Every user action funnels through this wrapper so a failed request is
   // always surfaced — a silently swallowed rejection reads as a dead button.
@@ -164,7 +167,7 @@ export function NodeView() {
       </div>
 
       <div className="flex shrink-0 items-center gap-1 border-b border-border px-3 pt-1.5">
-        {TABS.map((t) => (
+        {tabs.map((t) => (
           <button
             key={t.id}
             type="button"
@@ -195,6 +198,7 @@ export function NodeView() {
         )}
         {tab === "events" && <EventsTab nodeId={id} />}
         {tab === "children" && <ChildrenTab node={node} />}
+        {tab === "review" && hasWorktree && <ReviewTab node={node} onAddressed={() => setTab("terminal")} />}
       </div>
     </div>
   );

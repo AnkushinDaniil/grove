@@ -1,5 +1,6 @@
 import type {
   AddReviewDraftRequest,
+  AddWorktreeCommentRequest,
   AiDraftRequest,
   AiDraftResponse,
   ArchiveResponse,
@@ -8,6 +9,7 @@ import type {
   DirSuggestions,
   DraftComment,
   Event,
+  MergeWorktreeResponse,
   Node,
   PatchNodeRequest,
   PRReview,
@@ -25,6 +27,9 @@ import type {
   UsageResponse,
   UsageWindowKind,
   VersionResponse,
+  WorktreeComment,
+  WorktreeCommentsResponse,
+  WorktreeReview,
 } from "../gen/types";
 import { CSRF_HEADER } from "./auth";
 
@@ -83,6 +88,19 @@ export interface ApiClient {
   submitReview(req: SubmitReviewRequest): Promise<SubmitReviewResponse>;
   /** Posts an immediate reply to an existing thread, optionally resolving it. */
   replyToThread(req: ReplyToThreadRequest): Promise<void>;
+
+  // --- Worktree review (/api/v1/reviews/worktree) ---
+  /** A task node's worktree diff (working tree vs. merge-base with base_ref). */
+  getWorktreeReview(node: string, repo: string): Promise<WorktreeReview>;
+  getWorktreeComments(node: string, repo: string): Promise<WorktreeCommentsResponse>;
+  addWorktreeComment(body: AddWorktreeCommentRequest): Promise<WorktreeComment>;
+  deleteWorktreeComment(id: string): Promise<void>;
+  /** Squash-merges the worktree into its parent; requires a clean tree. */
+  mergeWorktree(node: string, repo: string): Promise<MergeWorktreeResponse>;
+  /** Composes the worktree's comments into a prompt and starts a PTY session
+   *  on the node so the agent fixes them -- navigate to the node's terminal
+   *  to watch. */
+  addressWorktree(node: string, repo: string): Promise<Session>;
 }
 
 function isErrorBody(v: unknown): v is { error: string } {
@@ -205,6 +223,22 @@ export const realApiClient: ApiClient = {
   submitReview: (req) => request("/reviews/pr/submit", { method: "POST", body: JSON.stringify(req) }),
 
   replyToThread: (req) => request("/reviews/pr/reply", { method: "POST", body: JSON.stringify(req) }),
+
+  getWorktreeReview: (node, repo) => request(`/reviews/worktree${qs({ node, repo })}`),
+
+  getWorktreeComments: (node, repo) => request(`/reviews/worktree/comments${qs({ node, repo })}`),
+
+  addWorktreeComment: (body) =>
+    request("/reviews/worktree/comments", { method: "POST", body: JSON.stringify(body) }),
+
+  deleteWorktreeComment: (id) =>
+    request(`/reviews/worktree/comments/${encodeURIComponent(id)}`, { method: "DELETE" }),
+
+  mergeWorktree: (node, repo) =>
+    request("/reviews/worktree/merge", { method: "POST", body: JSON.stringify({ node, repo }) }),
+
+  addressWorktree: (node, repo) =>
+    request("/reviews/worktree/address", { method: "POST", body: JSON.stringify({ node, repo }) }),
 };
 
 // Mock mode swaps in an in-memory client. The dynamic import keeps src/mock/

@@ -16,3 +16,18 @@ afterEach(cleanup);
 if (!Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = () => {};
 }
+
+// jsdom also has no ResizeObserver -- @pierre/diffs' ResizeManager uses it
+// unconditionally to react to the diff container resizing, which real
+// browsers provide natively. A no-op stub is standard practice for this
+// (same category as scrollIntoView above); it never fires resize callbacks
+// under jsdom, which is fine since nothing in tests depends on layout
+// remeasurement.
+if (typeof globalThis.ResizeObserver === "undefined") {
+  class NoopResizeObserver implements ResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+  globalThis.ResizeObserver = NoopResizeObserver;
+}

@@ -1,0 +1,29 @@
+/* @pierre/diffs renders into a <diffs-container> shadow root and exposes its
+ * chrome layer (row backgrounds, gutter, line numbers -- distinct from
+ * syntax token colors, which come from the grove-dark/grove-light themes in
+ * pierreTheme.ts) as CSS custom properties. `--diffs-*-override` properties
+ * are its sanctioned host-theming hook; custom properties inherit through
+ * shadow boundaries, so setting them here on the light-DOM wrapper reaches
+ * the shadow tree without needing to touch Pierre's internals. Wiring them
+ * to grove's own --color-* tokens (already dual-mode via the
+ * prefers-color-scheme block in index.css) keeps diff add/remove tinting
+ * pixel-identical to the +/- diffstat elsewhere in the app, in both themes,
+ * with no duplicated color literals here.
+ */
+.grove-diff-view {
+  --diffs-font-family: var(--font-mono);
+  --diffs-header-font-family: var(--font-mono);
+
+  --diffs-addition-color-override: var(--color-diff-add);
+  --diffs-deletion-color-override: var(--color-status-failed);
+  --diffs-bg-addition-override: color-mix(in srgb, var(--color-diff-add) 11%, var(--color-surface));
+  --diffs-bg-addition-emphasis-override: color-mix(in srgb, var(--color-diff-add) 30%, var(--color-surface));
+  --diffs-bg-deletion-override: color-mix(in srgb, var(--color-status-failed) 11%, var(--color-surface));
+  --diffs-bg-deletion-emphasis-override: color-mix(in srgb, var(--color-status-failed) 30%, var(--color-surface));
+
+  --diffs-fg-number-override: var(--color-ink-faint);
+  --diffs-bg-context-override: var(--color-surface);
+  --diffs-bg-context-gutter-override: var(--color-surface-2);
+  --diffs-bg-separator-override: var(--color-border);
+  --diffs-bg-hover-override: var(--color-hover);
+}

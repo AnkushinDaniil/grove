@@ -1,6 +1,7 @@
 package gitcli
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -19,22 +20,34 @@ func NewRunner() *Runner { return &Runner{} }
 // and returns trimmed stdout. On failure it returns a *GitError carrying the
 // exit code and stderr.
 func (r *Runner) Run(ctx context.Context, dir string, args ...string) (string, error) {
+	out, err := r.output(ctx, dir, args...)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+// output executes `git <args...>` in dir and returns raw, untrimmed stdout
+// bytes. It is the byte-preserving core behind Run, used directly by callers
+// like ShowFile that must not have file contents trimmed. On failure it returns
+// a *GitError carrying the exit code and stderr.
+func (r *Runner) output(ctx context.Context, dir string, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, "git", args...) //nolint:gosec // G204: binary is the fixed literal "git"; args are internal command construction, not raw external input
 	cmd.Dir = dir
 
-	var stdout, stderr strings.Builder
+	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
-		return "", &GitError{
+		return nil, &GitError{
 			Args:     args,
 			Dir:      dir,
 			ExitCode: exitCode(err),
 			Stderr:   strings.TrimSpace(stderr.String()),
 		}
 	}
-	return strings.TrimSpace(stdout.String()), nil
+	return stdout.Bytes(), nil
 }
 
 // GitError reports a failed git invocation.

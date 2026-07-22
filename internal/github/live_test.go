@@ -75,3 +75,44 @@ func TestLivePRDetail(t *testing.T) {
 	t.Logf("files=%d first_file=%q first_file_hunks=%d threads=%d",
 		len(pr.Files), firstPath, firstHunks, len(pr.Threads))
 }
+
+// TestLivePRDetailContents exercises the rich-diff content fetch (Part 1) against
+// a real PR: it logs the first file's original/modified content lengths and any
+// per-file omissions. Skipped unless GROVE_LIVE=1.
+//
+//	GROVE_LIVE=1 go test -run TestLivePRDetailContents -v ./internal/github/
+func TestLivePRDetailContents(t *testing.T) {
+	if os.Getenv("GROVE_LIVE") != "1" {
+		t.Skip("set GROVE_LIVE=1 to run the live gh test")
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatalf("UserHomeDir: %v", err)
+	}
+	dir := filepath.Join(home, "RiderProjects", "nethermind")
+
+	const prNumber = 12545
+	pr, err := New().PRDetail(t.Context(), dir, prNumber)
+	if err != nil {
+		t.Fatalf("PRDetail(#%d): %v", prNumber, err)
+	}
+
+	t.Logf("pr #%d %q base_sha=%s head_sha=%s files=%d", pr.Number, pr.Title, pr.BaseSHA, pr.HeadSHA, len(pr.Files))
+	if len(pr.Files) > 0 {
+		f := pr.Files[0]
+		t.Logf("first_file=%q status=%s omitted=%q original_len=%d modified_len=%d",
+			f.Path, f.Status, f.ContentOmitted, len(f.OriginalContent), len(f.ModifiedContent))
+	}
+	omitted := map[string]int{}
+	withContent := 0
+	for _, f := range pr.Files {
+		if f.ContentOmitted != "" {
+			omitted[f.ContentOmitted]++
+			continue
+		}
+		if f.OriginalContent != "" || f.ModifiedContent != "" {
+			withContent++
+		}
+	}
+	t.Logf("files_with_content=%d omitted=%v", withContent, omitted)
+}

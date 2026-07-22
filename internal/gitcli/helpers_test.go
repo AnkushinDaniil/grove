@@ -351,3 +351,162 @@ func commitCount(t *testing.T, dir string) int {
 	}
 	return n
 }
+
+func TestMergeBase(t *testing.T) {
+	repo := newRepo(t)
+	r := NewRunner()
+	ctx := context.Background()
+
+	branchPoint := strings.TrimSpace(runIn(t, repo, "rev-parse", "HEAD"))
+	// Advance main and a feature branch independently of the branch point.
+	runIn(t, repo, "checkout", "-q", "-b", "feature")
+	commitFile(t, repo, "feature.txt", "f", "feature commit")
+	runIn(t, repo, "checkout", "-q", "main")
+	commitFile(t, repo, "main.txt", "m", "main commit")
+
+	got, err := r.MergeBase(ctx, repo, "main", "feature")
+	if err != nil {
+		t.Fatalf("MergeBase() error = %v", err)
+	}
+	if got != branchPoint {
+		t.Errorf("MergeBase() = %q, want the branch point %q", got, branchPoint)
+	}
+}
+
+func TestShowFilePreservesBytes(t *testing.T) {
+	repo := newRepo(t)
+	r := NewRunner()
+	ctx := context.Background()
+
+	// Leading/trailing whitespace that a trimming reader would corrupt.
+	const content = "  leading\nmiddle\n\ntrailing  \n"
+	commitFile(t, repo, "kept.txt", content, "add kept.txt")
+	ref := strings.TrimSpace(runIn(t, repo, "rev-parse", "HEAD"))
+
+	got, err := r.ShowFile(ctx, repo, ref, "kept.txt")
+	if err != nil {
+		t.Fatalf("ShowFile() error = %v", err)
+	}
+	if string(got) != content {
+		t.Errorf("ShowFile() = %q, want exact bytes %q", got, content)
+	}
+
+	// A path absent at the ref surfaces a *GitError.
+	if _, err := r.ShowFile(ctx, repo, ref, "nope.txt"); err == nil {
+		t.Error("ShowFile() on missing path error = nil, want error")
+	}
+}
+
+func TestDiffNameStatus(t *testing.T) {
+	repo := newRepo(t)
+	r := NewRunner()
+	ctx := context.Background()
+
+	base := strings.TrimSpace(runIn(t, repo, "rev-parse", "HEAD"))
+	commitFile(t, repo, "added.txt", "new\n", "add file")
+	commitFile(t, repo, "README.md", "changed\n", "modify readme")
+
+	changes, err := r.DiffNameStatus(ctx, repo, base)
+	if err != nil {
+		t.Fatalf("DiffNameStatus() error = %v", err)
+	}
+	byPath := map[string]NameStatus{}
+	for _, c := range changes {
+		byPath[c.Path] = c
+	}
+	if c, ok := byPath["added.txt"]; !ok || c.Status == "" || c.Status[0] != 'A' {
+		t.Errorf("added.txt = %+v, want status A", c)
+	}
+	if c, ok := byPath["README.md"]; !ok || c.Status == "" || c.Status[0] != 'M' {
+		t.Errorf("README.md = %+v, want status M", c)
+	}
+}
+
+func TestDiffNameStatusRename(t *testing.T) {
+	repo := newRepo(t)
+	r := NewRunner()
+	ctx := context.Background()
+
+	// A substantial file so git detects the rename by content similarity.
+	body := strings.Repeat("line of content\n", 20)
+	commitFile(t, repo, "old.txt", body, "add old.txt")
+	base := strings.TrimSpace(runIn(t, repo, "rev-parse", "HEAD"))
+	runIn(t, repo, "mv", "old.txt", "new.txt")
+	runIn(t, repo, "commit", "-q", "-m", "rename")
+
+	changes, err := r.DiffNameStatus(ctx, repo, base)
+	if err != nil {
+		t.Fatalf("DiffNameStatus() error = %v", err)
+	}
+	if len(changes) != 1 {
+		t.Fatalf("changes = %+v, want a single rename entry", changes)
+	}
+	if c := changes[0]; c.Status == "" || c.Status[0] != 'R' || c.OldPath != "old.txt" || c.Path != "new.txt" {
+		t.Errorf("rename = %+v, want R old.txt -> new.txt", c)
+	}
+}
+
+func TestNumStat(t *testing.T) {
+	repo := newRepo(t)
+	r := NewRunner()
+	ctx := context.Background()
+
+	base := strings.TrimSpace(runIn(t, repo, "rev-parse", "HEAD"))
+	commitFile(t, repo, "text.txt", "a\nb\nc\n", "add text")
+	// A binary file (NUL bytes) reports git's "-" counts.
+	if err := os.WriteFile(filepath.Join(repo, "data.bin"), []byte{0x00, 0x01, 0x02}, 0o644); err != nil {
+		t.Fatalf("write binary: %v", err)
+	}
+	runIn(t, repo, "add", "-A")
+	runIn(t, repo, "commit", "-q", "-m", "add binary")
+
+	stats, err := r.NumStat(ctx, repo, base)
+	if err != nil {
+		t.Fatalf("NumStat() error = %v", err)
+	}
+	if got := stats["text.txt"]; got.Additions != 3 || got.Deletions != 0 {
+		t.Errorf("text.txt numstat = %+v, want +3/-0", got)
+	}
+	if got := stats["data.bin"]; got.Additions != -1 || got.Deletions != -1 {
+		t.Errorf("data.bin numstat = %+v, want -1/-1 (binary)", got)
+	}
+}
+
+func TestUntrackedFiles(t *testing.T) {
+	repo := newRepo(t)
+	r := NewRunner()
+	ctx := context.Background()
+
+	none, err := r.UntrackedFiles(ctx, repo)
+	if err != nil {
+		t.Fatalf("UntrackedFiles() error = %v", err)
+	}
+	if len(none) != 0 {
+		t.Errorf("UntrackedFiles() = %v on clean repo, want none", none)
+	}
+
+	if err := os.WriteFile(filepath.Join(repo, "loose.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatalf("write untracked: %v", err)
+	}
+	got, err := r.UntrackedFiles(ctx, repo)
+	if err != nil {
+		t.Fatalf("UntrackedFiles() error = %v", err)
+	}
+	if len(got) != 1 || got[0] != "loose.txt" {
+		t.Errorf("UntrackedFiles() = %v, want [loose.txt]", got)
+	}
+}
+
+func TestNumStatCount(t *testing.T) {
+	cases := []struct {
+		in   string
+		want int
+	}{
+		{"5", 5}, {"0", 0}, {"-", -1}, {"garbage", 0},
+	}
+	for _, tc := range cases {
+		if got := numStatCount(tc.in); got != tc.want {
+			t.Errorf("numStatCount(%q) = %d, want %d", tc.in, got, tc.want)
+		}
+	}
+}

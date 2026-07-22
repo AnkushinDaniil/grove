@@ -335,6 +335,11 @@ export interface DiffHunk {
 
 export type PRFileStatus = "modified" | "added" | "removed" | "renamed";
 
+// "" = full contents included; a non-empty reason means original_content/
+// modified_content are omitted and the UI renders a placeholder instead
+// (see docs/API.md "Diff content for rich rendering (Pierre)").
+export type ContentOmittedReason = "" | "binary" | "too_large";
+
 export interface PRReviewFile {
   path: string;
   old_path?: string; // set when status === "renamed" and differs from path
@@ -342,9 +347,13 @@ export interface PRReviewFile {
   additions: number;
   deletions: number;
   binary: boolean;
-  // Empty when the diff body itself is unavailable (binary, or a diff `gh`
-  // declined to expand, e.g. too large) -- render a "view on GitHub"
-  // fallback in either case rather than an empty file section.
+  // Full before/after file text (not patches) so @pierre/diffs can compute
+  // its own diff -- "" for added/removed/binary/omitted, as appropriate.
+  original_content: string;
+  modified_content: string;
+  content_omitted: ContentOmittedReason;
+  // Kept as a fallback; the UI renders original_content/modified_content via
+  // @pierre/diffs rather than walking these directly.
   hunks: DiffHunk[];
 }
 
@@ -452,6 +461,65 @@ export interface ReplyToThreadRequest {
   thread_id: string;
   body: string;
   resolve: boolean;
+}
+
+// --- Worktree review (/api/v1/reviews/worktree) ---
+
+// Same content-bearing shape as PRReviewFile (see docs/API.md's "Worktree
+// review" section) -- both carry full before/after file text for
+// @pierre/diffs rather than patches.
+export type WorktreeFile = PRReviewFile;
+
+export interface WorktreeReview {
+  node_id: NodeID;
+  repo: string;
+  worktree_path: string;
+  branch: string;
+  base_ref: string;
+  has_uncommitted: boolean;
+  files: WorktreeFile[];
+}
+
+// A local review note keyed to (node, repo, path, line) -- not a GitHub
+// entity; "Address with agent" composes these into a prompt for a fix
+// session rather than posting them anywhere.
+export interface WorktreeComment {
+  id: string;
+  node_id: NodeID;
+  repo: string;
+  path: string;
+  line: number;
+  side: ReviewCommentSide;
+  body: string;
+  created_at: string;
+}
+
+export interface WorktreeCommentsResponse {
+  comments: WorktreeComment[];
+}
+
+export interface AddWorktreeCommentRequest {
+  node: NodeID;
+  repo: string;
+  path: string;
+  line: number;
+  side: ReviewCommentSide;
+  body: string;
+}
+
+export interface MergeWorktreeRequest {
+  node: NodeID;
+  repo: string;
+}
+
+export interface MergeWorktreeResponse {
+  merged: boolean;
+  message: string;
+}
+
+export interface AddressWorktreeRequest {
+  node: NodeID;
+  repo: string;
 }
 
 // --- WebSocket /ws/state (JSON text frames, server-push) ---

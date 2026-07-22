@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os/exec"
 	"strings"
 	"sync"
@@ -25,7 +26,8 @@ type RunnerFunc func(ctx context.Context, dir string, args ...string) ([]byte, e
 
 // Client wraps the gh CLI. The zero value is not usable; build one with New.
 type Client struct {
-	run RunnerFunc
+	run    RunnerFunc
+	logger *slog.Logger
 
 	mu    sync.Mutex
 	login string // cached gh login, resolved once per process on first success
@@ -39,9 +41,16 @@ func WithRunner(run RunnerFunc) Option {
 	return func(c *Client) { c.run = run }
 }
 
-// New builds a Client. Without options it runs the real gh binary on PATH.
+// WithLogger sets the logger used for best-effort warnings (e.g. a per-file
+// content fetch that degraded rather than failed the whole review).
+func WithLogger(logger *slog.Logger) Option {
+	return func(c *Client) { c.logger = logger }
+}
+
+// New builds a Client. Without options it runs the real gh binary on PATH and
+// logs to slog.Default().
 func New(opts ...Option) *Client {
-	c := &Client{run: execRunner}
+	c := &Client{run: execRunner, logger: slog.Default()}
 	for _, opt := range opts {
 		opt(c)
 	}

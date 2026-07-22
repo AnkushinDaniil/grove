@@ -1,28 +1,25 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { useParams } from "react-router";
 import { AlertTriangle } from "lucide-react";
 import { loadReviewWorkspace, useReviewWorkspaceStore } from "../../state/reviewWorkspace";
 import { EmptyState } from "../common/EmptyState";
 import { ReviewHeader } from "./ReviewHeader";
-import { DiffFile } from "./DiffFile";
+import { ThreadCard } from "./ThreadCard";
+import { DraftPendingCard } from "./DraftPendingCard";
+import { CommentComposer } from "./CommentComposer";
 import { DraftsRail } from "./DraftsRail";
 import { SubmitBar } from "./SubmitBar";
-import type { ReviewCommentSide } from "../../gen/types";
+import type { DiffViewComment, DiffViewComposerTarget } from "../diff/types";
 
-/** The line a new (not-yet-posted) comment composer is currently open on --
- *  at most one at a time, app-wide, to keep the diff from turning into a
- *  wall of open textareas. */
-export interface ActiveComposerTarget {
-  path: string;
-  side: ReviewCommentSide;
-  line: number;
-}
+// @pierre/diffs + shiki are a meaningful chunk of the bundle (syntax
+// highlighting, worker pool) -- lazy-load so they only load once a diff
+// actually renders, mirroring TerminalTab's XtermHost split.
+const DiffView = lazy(() => import("../diff/DiffView").then((m) => ({ default: m.DiffView })));
 
 /** One PR = one review workspace (docs/API.md "Interactive review
  *  workspace"): the PR diff rendered with inline comment threads,
  *  LLM-assisted drafting, and batch submit. Route: /review/:dir/:pr, `dir`
- *  URL-encoded by the caller (react-router's useParams already fully
- *  decodes it back -- see PRRow's openWorkspace). */
+ *  URL-encoded by the caller (see PRRow's openWorkspace). */
 export function ReviewWorkspace() {
   const { dir, pr: prParam } = useParams<{ dir: string; pr: string }>();
   const pr = prParam ? Number(prParam) : NaN;
@@ -34,7 +31,7 @@ export function ReviewWorkspace() {
   const loaded = useReviewWorkspaceStore((s) => s.loaded);
   const error = useReviewWorkspaceStore((s) => s.error);
 
-  const [activeComposer, setActiveComposer] = useState<ActiveComposerTarget | null>(null);
+  const [activeComposer, setActiveComposer] = useState<DiffViewComposerTarget | null>(null);
 
   useEffect(() => {
     if (!validParams || !dir) return;
@@ -66,27 +63,57 @@ export function ReviewWorkspace() {
     );
   }
 
+  // Existing GitHub threads and pending drafts both anchor at path+side+line
+  // -- DiffView doesn't need to know GitHub threads and local drafts are
+  // different things, just where each pre-rendered card belongs.
+  const comments: DiffViewComment[] = [
+    ...review.threads.map((t) => ({
+      id: t.id,
+      path: t.path,
+      side: t.side,
+      line: t.line,
+      content: <ThreadCard key={t.id} thread={t} dir={dir} pr={pr} />,
+    })),
+    ...drafts.map((d) => ({
+      id: d.id,
+      path: d.path,
+      side: d.side,
+      line: d.line,
+      content: <DraftPendingCard key={d.id} draft={d} />,
+    })),
+  ];
+
+  function renderComposer(target: DiffViewComposerTarget) {
+    return (
+      <CommentComposer
+        mode="new"
+        dir={dir!}
+        pr={pr}
+        path={target.path}
+        side={target.side}
+        line={target.line}
+        onAdded={() => setActiveComposer(null)}
+        onCancel={() => setActiveComposer(null)}
+      />
+    );
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       <ReviewHeader review={review} dir={dir} />
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          {review.files.length === 0 && (
-            <EmptyState title="No file changes" description="This PR has no diff to review." />
-          )}
-          {review.files.map((file) => (
-            <DiffFile
-              key={file.path}
-              file={file}
-              dir={dir}
-              pr={pr}
-              threads={review.threads.filter((t) => t.path === file.path)}
-              drafts={drafts.filter((d) => d.path === file.path)}
+        <div className="min-h-0 flex-1 overflow-hidden">
+          <Suspense fallback={<div className="p-5 text-xs text-ink-faint">Loading diff viewer…</div>}>
+            <DiffView
+              files={review.files}
+              comments={comments}
+              viewedScopeKey={`pr:${dir}:${pr}`}
               activeComposer={activeComposer}
-              onOpenComposer={(side, line) => setActiveComposer({ path: file.path, side, line })}
-              onCloseComposer={() => setActiveComposer(null)}
+              onOpenComposer={setActiveComposer}
+              renderComposer={renderComposer}
+              emptyDescription="This PR has no diff to review."
             />
-          ))}
+          </Suspense>
         </div>
         <DraftsRail drafts={drafts} />
       </div>

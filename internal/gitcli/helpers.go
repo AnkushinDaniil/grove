@@ -129,3 +129,120 @@ func (r *Runner) Commit(ctx context.Context, dir, message string) error {
 	}
 	return nil
 }
+
+// MergeBase returns the best common ancestor commit of a and b, resolved in
+// dir (`git merge-base a b`). It is the branch point a worktree review diffs
+// its working tree against.
+func (r *Runner) MergeBase(ctx context.Context, dir, a, b string) (string, error) {
+	out, err := r.Run(ctx, dir, "merge-base", a, b)
+	if err != nil {
+		return "", fmt.Errorf("merge-base %s %s: %w", a, b, err)
+	}
+	return out, nil
+}
+
+// ShowFile returns the raw bytes of path as of ref in dir (`git show ref:path`).
+// Contents are returned untrimmed so file bytes survive exactly. A path absent
+// at ref yields a *GitError, which callers treat as an absent side (e.g. the
+// base side of an added file).
+func (r *Runner) ShowFile(ctx context.Context, dir, ref, path string) ([]byte, error) {
+	out, err := r.output(ctx, dir, "show", ref+":"+path)
+	if err != nil {
+		return nil, fmt.Errorf("show %s:%s: %w", ref, path, err)
+	}
+	return out, nil
+}
+
+// NameStatus is one file's change between a base tree and the working tree:
+// Status is git's raw letter (A|M|D|T, or R/C followed by a similarity score),
+// Path is the current path, and OldPath is the pre-rename/copy path, set only
+// when Status begins with R or C.
+type NameStatus struct {
+	Status  string
+	Path    string
+	OldPath string
+}
+
+// DiffNameStatus returns the name-status of every tracked change between ref and
+// dir's working tree (`git diff --name-status --find-renames ref`). Rename and
+// copy entries carry the new path in Path and the old path in OldPath. Untracked
+// files are not reported here (see UntrackedFiles).
+func (r *Runner) DiffNameStatus(ctx context.Context, dir, ref string) ([]NameStatus, error) {
+	out, err := r.Run(ctx, dir, "diff", "--name-status", "--find-renames", ref)
+	if err != nil {
+		return nil, fmt.Errorf("diff --name-status %s: %w", ref, err)
+	}
+	if out == "" {
+		return nil, nil
+	}
+	var changes []NameStatus
+	for _, line := range strings.Split(out, "\n") {
+		fields := strings.Split(line, "\t")
+		if len(fields) < 2 {
+			continue
+		}
+		status := fields[0]
+		if status != "" && (status[0] == 'R' || status[0] == 'C') && len(fields) >= 3 {
+			changes = append(changes, NameStatus{Status: status, OldPath: fields[1], Path: fields[2]})
+			continue
+		}
+		changes = append(changes, NameStatus{Status: status, Path: fields[1]})
+	}
+	return changes, nil
+}
+
+// NumStatEntry is one file's added/deleted line counts. Binary files report -1
+// for both, matching git's `-` numstat markers.
+type NumStatEntry struct {
+	Additions int
+	Deletions int
+}
+
+// NumStat returns per-path added/deleted line counts between ref and dir's
+// working tree (`git diff --numstat ref`), keyed by the file path. Binary files
+// (git prints `-\t-`) are recorded as -1/-1.
+func (r *Runner) NumStat(ctx context.Context, dir, ref string) (map[string]NumStatEntry, error) {
+	out, err := r.Run(ctx, dir, "diff", "--numstat", ref)
+	if err != nil {
+		return nil, fmt.Errorf("diff --numstat %s: %w", ref, err)
+	}
+	stats := make(map[string]NumStatEntry)
+	if out == "" {
+		return stats, nil
+	}
+	for _, line := range strings.Split(out, "\n") {
+		fields := strings.Split(line, "\t")
+		if len(fields) < 3 {
+			continue
+		}
+		stats[fields[2]] = NumStatEntry{Additions: numStatCount(fields[0]), Deletions: numStatCount(fields[1])}
+	}
+	return stats, nil
+}
+
+// numStatCount parses one numstat count, mapping git's binary `-` marker to -1
+// and any unparseable value to 0.
+func numStatCount(s string) int {
+	if s == "-" {
+		return -1
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return 0
+	}
+	return n
+}
+
+// UntrackedFiles lists dir's untracked, non-ignored files
+// (`git ls-files --others --exclude-standard`), one repo-relative path per
+// entry. These are the additions a base-tree diff misses.
+func (r *Runner) UntrackedFiles(ctx context.Context, dir string) ([]string, error) {
+	out, err := r.Run(ctx, dir, "ls-files", "--others", "--exclude-standard")
+	if err != nil {
+		return nil, fmt.Errorf("ls-files --others: %w", err)
+	}
+	if out == "" {
+		return nil, nil
+	}
+	return strings.Split(out, "\n"), nil
+}

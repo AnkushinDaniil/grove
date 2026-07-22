@@ -2,8 +2,16 @@ package github
 
 import (
 	"context"
+	"encoding/base64"
 	"strings"
 	"testing"
+)
+
+// baseRefOID and headRefOID are the two commit oids the canned pr-view payload
+// targets; the fake contents runner keys its base/head bodies off them.
+const (
+	baseRefOID = "base456"
+	headRefOID = "abc123"
 )
 
 // prViewJSON is a canned `gh pr view --json …` payload.
@@ -14,6 +22,7 @@ const prViewJSON = `{
   "url": "https://github.com/NethermindEth/nethermind/pull/12540",
   "state": "OPEN",
   "headRefOid": "abc123",
+  "baseRefOid": "base456",
   "baseRefName": "master",
   "reviewDecision": "REVIEW_REQUIRED",
   "body": "This adds fast sync.",
@@ -66,6 +75,19 @@ const threadsJSON = `{
   ]}}}}
 }`
 
+// cannedContent base64-encodes a distinguishable body for the fake contents
+// endpoint: "<SIDE>:<path>" where SIDE is BASE or HEAD, so tests can assert
+// which ref and path each side was read from.
+func cannedContent(endpoint string) []byte {
+	inner := strings.TrimPrefix(endpoint, "repos/NethermindEth/nethermind/contents/")
+	path, ref, _ := strings.Cut(inner, "?ref=")
+	side := "HEAD"
+	if ref == baseRefOID {
+		side = "BASE"
+	}
+	return []byte(base64.StdEncoding.EncodeToString([]byte(side+":"+path)) + "\n")
+}
+
 // prDetailRunner dispatches a fake gh call to the matching canned payload,
 // covering every gh invocation PRDetail makes.
 func prDetailRunner(t *testing.T) RunnerFunc {
@@ -80,6 +102,8 @@ func prDetailRunner(t *testing.T) RunnerFunc {
 			return []byte("me\n"), nil
 		case args[0] == "api" && args[1] == "graphql":
 			return []byte(threadsJSON), nil
+		case args[0] == "api" && strings.Contains(args[1], "/contents/"):
+			return cannedContent(args[1]), nil
 		case args[0] == "api" && strings.Contains(args[1], "/files"):
 			return []byte(prFilesJSON), nil
 		default:
@@ -128,6 +152,19 @@ func TestPRDetailAssembles(t *testing.T) {
 	binary := pr.Files[2]
 	if !binary.Binary || len(binary.Hunks) != 0 {
 		t.Errorf("binary file = %+v, want binary=true no hunks", binary)
+	}
+
+	// Rich-diff contents: a modified file carries both sides read from the base
+	// and head refs; a renamed file reads its base side from the old path; an
+	// added binary file omits its contents.
+	if main.ContentOmitted != "" || main.OriginalContent != "BASE:src/main.go" || main.ModifiedContent != "HEAD:src/main.go" {
+		t.Errorf("main contents = %q/%q omit=%q, want BASE/HEAD of src/main.go", main.OriginalContent, main.ModifiedContent, main.ContentOmitted)
+	}
+	if renamed.OriginalContent != "BASE:src/old.go" || renamed.ModifiedContent != "HEAD:src/new.go" {
+		t.Errorf("renamed contents = %q/%q, want base at old path, head at new path", renamed.OriginalContent, renamed.ModifiedContent)
+	}
+	if binary.ContentOmitted != "binary" || binary.OriginalContent != "" || binary.ModifiedContent != "" {
+		t.Errorf("binary file contents = %q/%q omit=%q, want empty omit=binary", binary.OriginalContent, binary.ModifiedContent, binary.ContentOmitted)
 	}
 
 	// Threads.
@@ -243,6 +280,82 @@ func TestPRThreadsBadRepoName(t *testing.T) {
 	}))
 	if _, err := c.PRDetail(context.Background(), "/repo", 1); err == nil {
 		t.Fatal("PRDetail() error = nil, want an owner/repo split error")
+	}
+}
+
+// omissionFilesJSON lists one file per content-omission outcome, each with a
+// non-empty patch so GitHub is not the one flagging them binary.
+const omissionFilesJSON = `[
+  {"filename": "added.txt", "status": "added", "additions": 1, "patch": "@@ -0,0 +1 @@\n+new"},
+  {"filename": "removed.txt", "status": "removed", "deletions": 1, "patch": "@@ -1 +0,0 @@\n-old"},
+  {"filename": "big.txt", "status": "modified", "patch": "@@ -1 +1 @@\n-a\n+b"},
+  {"filename": "data.bin", "status": "modified", "patch": "@@ -1 +1 @@\n-a\n+b"},
+  {"filename": "weird.txt", "status": "modified", "patch": "@@ -1 +1 @@\n-a\n+b"},
+  {"filename": "gone.txt", "status": "modified", "patch": "@@ -1 +1 @@\n-a\n+b"}
+]`
+
+func TestPRDetailContentOmission(t *testing.T) {
+	// b64 encodes a small text body; headFor returns the per-path head side.
+	b64 := func(s string) []byte { return []byte(base64.StdEncoding.EncodeToString([]byte(s)) + "\n") }
+	runner := func(_ context.Context, _ string, args ...string) ([]byte, error) {
+		switch {
+		case args[0] == "repo":
+			return []byte("o/r"), nil
+		case args[0] == "pr":
+			return []byte(prViewJSON), nil
+		case args[0] == "api" && args[1] == "user":
+			return []byte("me"), nil
+		case args[0] == "api" && args[1] == "graphql":
+			return []byte(`{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[]}}}}}`), nil
+		case args[0] == "api" && strings.Contains(args[1], "/contents/"):
+			inner := strings.TrimPrefix(args[1], "repos/o/r/contents/")
+			path, ref, _ := strings.Cut(inner, "?ref=")
+			if ref == baseRefOID {
+				return b64("small base"), nil // every base side is small text
+			}
+			switch path {
+			case "big.txt":
+				return b64(strings.Repeat("x", MaxContentBytes+1)), nil
+			case "data.bin":
+				return b64("has\x00nul"), nil
+			case "weird.txt":
+				return []byte("!!! not base64 !!!\n"), nil
+			case "gone.txt":
+				return nil, &GHError{Args: args, ExitCode: 1, Stderr: "404"}
+			default:
+				return b64("HEAD " + path), nil
+			}
+		case args[0] == "api" && strings.Contains(args[1], "/files"):
+			return []byte(omissionFilesJSON), nil
+		default:
+			t.Fatalf("unexpected gh call: %v", args)
+			return nil, nil
+		}
+	}
+	pr, err := New(WithRunner(runner)).PRDetail(context.Background(), "/repo", 1)
+	if err != nil {
+		t.Fatalf("PRDetail() error = %v", err)
+	}
+	byPath := make(map[string]PRFile, len(pr.Files))
+	for _, f := range pr.Files {
+		byPath[f.Path] = f
+	}
+
+	if f := byPath["added.txt"]; f.OriginalContent != "" || f.ModifiedContent != "HEAD added.txt" || f.ContentOmitted != "" {
+		t.Errorf("added.txt = %q/%q omit=%q, want empty original, head modified", f.OriginalContent, f.ModifiedContent, f.ContentOmitted)
+	}
+	if f := byPath["removed.txt"]; f.OriginalContent != "small base" || f.ModifiedContent != "" || f.ContentOmitted != "" {
+		t.Errorf("removed.txt = %q/%q omit=%q, want base original, empty modified", f.OriginalContent, f.ModifiedContent, f.ContentOmitted)
+	}
+	for _, path := range []string{"big.txt", "gone.txt"} {
+		if f := byPath[path]; f.ContentOmitted != "too_large" || f.OriginalContent != "" || f.ModifiedContent != "" {
+			t.Errorf("%s omit = %q (%q/%q), want too_large with empty contents", path, f.ContentOmitted, f.OriginalContent, f.ModifiedContent)
+		}
+	}
+	for _, path := range []string{"data.bin", "weird.txt"} {
+		if f := byPath[path]; f.ContentOmitted != "binary" || f.OriginalContent != "" || f.ModifiedContent != "" {
+			t.Errorf("%s omit = %q (%q/%q), want binary with empty contents", path, f.ContentOmitted, f.OriginalContent, f.ModifiedContent)
+		}
 	}
 }
 

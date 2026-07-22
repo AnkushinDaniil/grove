@@ -15,21 +15,45 @@ function renderWorkspace() {
   render(<RouterProvider router={router} />);
 }
 
+/** Clicks the first clickable line-number cell @pierre/diffs has rendered so
+ *  far (in whichever file's diff appears first in DOM order), opening
+ *  DiffView's comment composer there -- the rich-diff equivalent of the old
+ *  hand-rolled hunk table's hover "+" button. @pierre/diffs renders into a
+ *  <diffs-container> custom element's shadow root (confirmed via a live
+ *  render dump), which plain screen.getByText/getByRole can't see into, so
+ *  this reaches in directly. Retries via waitFor since the diff mounts
+ *  asynchronously (React.lazy + @pierre/diffs' own async highlight pass). */
+async function clickFirstLineNumber() {
+  await waitFor(() => {
+    const cell = document.querySelector("diffs-container")?.shadowRoot?.querySelector<HTMLElement>("[data-column-number]");
+    if (!cell) throw new Error("no clickable line number rendered yet");
+    fireEvent.click(cell);
+  });
+}
+
 describe("ReviewWorkspace (mock mode)", () => {
   afterEach(() => {
     useReviewWorkspaceStore.getState().reset();
   });
 
-  it("parses and renders the PR's files, hunks, diff lines, and existing threads", async () => {
+  it("parses and renders the PR's files via @pierre/diffs, with existing threads anchored inline", async () => {
     renderWorkspace();
 
     expect(await screen.findByText(/Fix nonce ordering check in TxPool\.Insert/)).toBeInTheDocument();
-    expect(screen.getByText("src/Nethermind/Nethermind.TxPool/TxPool.cs")).toBeInTheDocument();
+    // DiffView is React.lazy-loaded -- await the first file so the dynamic
+    // import has settled before asserting on the rest of the tree.
+    expect(await screen.findByText("src/Nethermind/Nethermind.TxPool/TxPool.cs")).toBeInTheDocument();
     expect(screen.getByText("src/Nethermind/Nethermind.TxPool.Test/TxPoolTests.cs")).toBeInTheDocument();
     expect(screen.getByText("src/Nethermind/Nethermind.TxPool/TxPoolConfig.cs")).toBeInTheDocument();
 
-    // A specific added line's text, from a specific hunk.
-    expect(screen.getByText(/if \(_logger\.IsTrace\)/)).toBeInTheDocument();
+    // The modified file's added line actually rendered inside @pierre/diffs'
+    // shadow root (see clickFirstLineNumber's doc comment on why this reaches
+    // in directly rather than using getByText).
+    const containers = document.querySelectorAll("diffs-container");
+    expect(containers).toHaveLength(3);
+    await waitFor(() => {
+      expect(containers[0].shadowRoot?.textContent).toContain("IsTrace");
+    });
 
     // Existing threads render inline: one unresolved (not mine), one resolved.
     expect(screen.getByText(/Should we also check/)).toBeInTheDocument();
@@ -38,12 +62,11 @@ describe("ReviewWorkspace (mock mode)", () => {
 
   it("adding a line comment creates a draft (shown inline and in the drafts rail); removing it clears both", async () => {
     renderWorkspace();
-    await screen.findByText("src/Nethermind/Nethermind.TxPool/TxPoolConfig.cs");
+    await screen.findByText("src/Nethermind/Nethermind.TxPool/TxPool.cs");
 
     expect(screen.getByText("No drafts yet")).toBeInTheDocument();
 
-    const addButtons = await screen.findAllByRole("button", { name: /add a comment on this line/i });
-    fireEvent.click(addButtons[0]);
+    await clickFirstLineNumber();
 
     const textarea = await screen.findByPlaceholderText("Leave a comment…");
     fireEvent.change(textarea, { target: { value: "Please add a bounds check here." } });
@@ -66,10 +89,9 @@ describe("ReviewWorkspace (mock mode)", () => {
 
   it("Draft with AI fills the composer textarea with the mocked suggestion", async () => {
     renderWorkspace();
-    await screen.findByText("src/Nethermind/Nethermind.TxPool/TxPoolConfig.cs");
+    await screen.findByText("src/Nethermind/Nethermind.TxPool/TxPool.cs");
 
-    const addButtons = await screen.findAllByRole("button", { name: /add a comment on this line/i });
-    fireEvent.click(addButtons[0]);
+    await clickFirstLineNumber();
 
     const textarea = (await screen.findByPlaceholderText("Leave a comment…")) as HTMLTextAreaElement;
     expect(textarea.value).toBe("");

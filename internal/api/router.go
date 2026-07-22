@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/AnkushinDaniil/grove/internal/gitcli"
 	"github.com/AnkushinDaniil/grove/internal/github"
 	"github.com/AnkushinDaniil/grove/internal/session"
 	"github.com/AnkushinDaniil/grove/internal/store"
@@ -68,6 +69,7 @@ type Handlers struct {
 	commit  string
 	home    func() (string, error)
 	github  GitHubClient
+	git     *gitcli.Runner
 
 	// aiDrafter runs a headless claude to draft PR review text (POST
 	// /reviews/pr/ai-draft). A nil value falls back to the real claude exec
@@ -101,6 +103,7 @@ func New(cfg Config) *Handlers {
 		commit:     cfg.Commit,
 		home:       home,
 		github:     gh,
+		git:        gitcli.NewRunner(),
 	}
 }
 
@@ -137,6 +140,13 @@ func (h *Handlers) Routes() http.Handler {
 	mux.HandleFunc("POST /api/v1/reviews/pr/ai-draft", h.handleAIDraft)
 	mux.HandleFunc("POST /api/v1/reviews/pr/submit", h.handleSubmitReview)
 	mux.HandleFunc("POST /api/v1/reviews/pr/reply", h.handleReplyThread)
+
+	mux.HandleFunc("GET /api/v1/reviews/worktree", h.handleWorktreeReview)
+	mux.HandleFunc("GET /api/v1/reviews/worktree/comments", h.handleListWorktreeComments)
+	mux.HandleFunc("POST /api/v1/reviews/worktree/comments", h.handleCreateWorktreeComment)
+	mux.HandleFunc("DELETE /api/v1/reviews/worktree/comments/{id}", h.handleDeleteWorktreeComment)
+	mux.HandleFunc("POST /api/v1/reviews/worktree/merge", h.handleWorktreeMerge)
+	mux.HandleFunc("POST /api/v1/reviews/worktree/address", h.handleWorktreeAddress)
 
 	mux.HandleFunc("POST "+PathAuthSession, h.handleAuthSession)
 	mux.HandleFunc("GET "+PathAuthMe, h.handleAuthMe)

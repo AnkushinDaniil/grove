@@ -2,10 +2,13 @@ package github
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 // PRReview is grove's internal, fully-assembled view of one pull request for the
@@ -19,6 +22,7 @@ type PRReview struct {
 	URL            string
 	State          string // OPEN|CLOSED|MERGED
 	HeadSHA        string
+	BaseSHA        string // base commit oid the PR targets (baseRefOid), for content fetches
 	BaseRef        string
 	Checks         string // passing|failing|pending|none
 	ReviewDecision string
@@ -29,14 +33,22 @@ type PRReview struct {
 
 // PRFile is one changed file's diff. Binary (or too-large) files carry no patch
 // from GitHub, so Binary is true and Hunks is empty.
+//
+// OriginalContent/ModifiedContent hold the full base/head file text for rich
+// rendering (docs/API.md "Diff content for rich rendering"): ContentOmitted is
+// "" when both are populated, or "binary"/"too_large" when the contents are left
+// empty. Hunks is kept as a fallback regardless.
 type PRFile struct {
-	Path      string
-	OldPath   string // previous_filename, set for renames
-	Status    string // modified|added|removed|renamed
-	Additions int
-	Deletions int
-	Binary    bool
-	Hunks     []Hunk
+	Path            string
+	OldPath         string // previous_filename, set for renames
+	Status          string // modified|added|removed|renamed
+	Additions       int
+	Deletions       int
+	Binary          bool
+	OriginalContent string
+	ModifiedContent string
+	ContentOmitted  string // "" | "binary" | "too_large"
+	Hunks           []Hunk
 }
 
 // Thread is one review-comment thread anchored to a file line. Line is 0 for an
@@ -100,6 +112,10 @@ func (c *Client) PRDetail(ctx context.Context, dir string, pr int) (PRReview, er
 	if err != nil {
 		return PRReview{}, err
 	}
+	// Fetch each file's full base/head contents for rich rendering (Pierre).
+	// Best-effort per file: a fetch failure degrades that file to
+	// content_omitted rather than failing the whole review.
+	c.attachFileContents(ctx, dir, name, meta.BaseSHA, meta.HeadSHA, files)
 	// Login is best-effort: without it is_mine simply stays false everywhere,
 	// which is preferable to failing the whole read.
 	login, _ := c.Login(ctx)
@@ -114,6 +130,101 @@ func (c *Client) PRDetail(ctx context.Context, dir string, pr int) (PRReview, er
 	return review, nil
 }
 
+// prContentConcurrency bounds parallel per-file content fetches while assembling
+// a PR review, keeping gh load predictable on large PRs.
+const prContentConcurrency = 6
+
+// attachFileContents fills each file's OriginalContent/ModifiedContent (and
+// ContentOmitted) in place, fetching the two sides concurrently (bounded). It
+// never fails: per-file errors degrade to an omission reason.
+func (c *Client) attachFileContents(ctx context.Context, dir, nameWithOwner, baseSHA, headSHA string, files []PRFile) {
+	sem := make(chan struct{}, prContentConcurrency)
+	var wg sync.WaitGroup
+	for i := range files {
+		wg.Add(1)
+		go func(f *PRFile) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			c.fillFileContent(ctx, dir, nameWithOwner, baseSHA, headSHA, f)
+		}(&files[i])
+	}
+	wg.Wait()
+}
+
+// fillFileContent resolves one file's original/modified contents and omission
+// reason in place. Added files have no base side, removed files no head side,
+// and renames read their base side from the old path. A gh fetch failure is
+// logged and mapped to content_omitted "too_large"; a base64 decode failure to
+// "binary".
+func (c *Client) fillFileContent(ctx context.Context, dir, nameWithOwner, baseSHA, headSHA string, f *PRFile) {
+	if f.Binary {
+		f.ContentOmitted = "binary"
+		return
+	}
+	var original, modified []byte
+	decodeFailed := false
+
+	if f.Status != "added" {
+		basePath := f.Path
+		if f.OldPath != "" {
+			basePath = f.OldPath
+		}
+		b, err := c.fileContentAt(ctx, dir, nameWithOwner, basePath, baseSHA)
+		switch {
+		case errors.Is(err, errDecodeContent):
+			decodeFailed = true
+		case err != nil:
+			c.logger.Warn("fetch base file content", "path", basePath, "ref", baseSHA, "err", err)
+			f.ContentOmitted = "too_large"
+			return
+		default:
+			original = b
+		}
+	}
+	if f.Status != "removed" {
+		b, err := c.fileContentAt(ctx, dir, nameWithOwner, f.Path, headSHA)
+		switch {
+		case errors.Is(err, errDecodeContent):
+			decodeFailed = true
+		case err != nil:
+			c.logger.Warn("fetch head file content", "path", f.Path, "ref", headSHA, "err", err)
+			f.ContentOmitted = "too_large"
+			return
+		default:
+			modified = b
+		}
+	}
+
+	dec := DecideContent(original, modified, decodeFailed)
+	f.OriginalContent = dec.Original
+	f.ModifiedContent = dec.Modified
+	f.ContentOmitted = dec.Omitted
+}
+
+// errDecodeContent marks a base64 decode failure of a file's contents, which
+// fillFileContent treats as a binary file rather than a fetch error.
+var errDecodeContent = errors.New("decode file content")
+
+// fileContentAt fetches and base64-decodes the contents of path at ref via the
+// GitHub contents API. A gh failure returns that error; a base64 decode failure
+// returns errDecodeContent. An empty file decodes to empty bytes, no error.
+func (c *Client) fileContentAt(ctx context.Context, dir, nameWithOwner, path, ref string) ([]byte, error) {
+	endpoint := fmt.Sprintf("repos/%s/contents/%s?ref=%s", nameWithOwner, path, ref)
+	out, err := c.call(ctx, dir, "api", endpoint, "--jq", ".content")
+	if err != nil {
+		return nil, err
+	}
+	// gh --jq .content yields GitHub's base64 with embedded newlines (wrapped at
+	// 60 chars); strip all whitespace before decoding.
+	encoded := strings.Join(strings.Fields(string(out)), "")
+	data, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", errDecodeContent, err)
+	}
+	return data, nil
+}
+
 // rawPRView mirrors the `gh pr view --json` object for a single PR.
 type rawPRView struct {
 	Number int    `json:"number"`
@@ -124,6 +235,7 @@ type rawPRView struct {
 	URL               string             `json:"url"`
 	State             string             `json:"state"`
 	HeadRefOid        string             `json:"headRefOid"`
+	BaseRefOid        string             `json:"baseRefOid"`
 	BaseRefName       string             `json:"baseRefName"`
 	ReviewDecision    string             `json:"reviewDecision"`
 	Body              string             `json:"body"`
@@ -132,7 +244,7 @@ type rawPRView struct {
 
 // prMeta reads the PR's metadata and folds its check rollup into a summary.
 func (c *Client) prMeta(ctx context.Context, dir string, pr int) (PRReview, error) {
-	const fields = "number,title,author,url,state,headRefOid,baseRefName,reviewDecision,body,statusCheckRollup"
+	const fields = "number,title,author,url,state,headRefOid,baseRefOid,baseRefName,reviewDecision,body,statusCheckRollup"
 	out, err := c.call(ctx, dir, "pr", "view", strconv.Itoa(pr), "--json", fields)
 	if err != nil {
 		return PRReview{}, fmt.Errorf("gh pr view: %w", err)
@@ -148,6 +260,7 @@ func (c *Client) prMeta(ctx context.Context, dir string, pr int) (PRReview, erro
 		URL:            raw.URL,
 		State:          raw.State,
 		HeadSHA:        raw.HeadRefOid,
+		BaseSHA:        raw.BaseRefOid,
 		BaseRef:        raw.BaseRefName,
 		Checks:         summarizeChecks(raw.StatusCheckRollup),
 		ReviewDecision: raw.ReviewDecision,
