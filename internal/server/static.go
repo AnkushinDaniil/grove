@@ -26,6 +26,12 @@ func (s *Server) staticHandler() http.Handler {
 // spaHandler serves static files from dist, falling back to index.html for any
 // path that is not a real file so the single-page app handles routing
 // client-side.
+//
+// Caching is the load-bearing detail: Vite fingerprints asset filenames
+// (index-<hash>.js), so those are safe to cache forever — but index.html
+// itself must NEVER be cached, or a browser keeps loading an old bundle after
+// the daemon updates. Without this, every grove upgrade silently served a
+// stale UI until the user hard-refreshed.
 func spaHandler(dist fs.FS) http.Handler {
 	fileServer := http.FileServer(http.FS(dist))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -35,6 +41,7 @@ func spaHandler(dist fs.FS) http.Handler {
 		}
 		if f, err := dist.Open(name); err == nil {
 			_ = f.Close()
+			setCacheHeaders(w, name)
 			fileServer.ServeHTTP(w, r)
 			return
 		}
@@ -44,8 +51,20 @@ func spaHandler(dist fs.FS) http.Handler {
 			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-cache")
 		_, _ = w.Write(index)
 	})
+}
+
+// setCacheHeaders caches fingerprinted assets aggressively and everything else
+// (index.html, manifest, root-level files) revalidation-required, so a daemon
+// upgrade is picked up on the next page load without a manual hard-refresh.
+func setCacheHeaders(w http.ResponseWriter, name string) {
+	if strings.HasPrefix(name, "assets/") {
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		return
+	}
+	w.Header().Set("Cache-Control", "no-cache")
 }
 
 // handleHint serves a minimal page when no UI is embedded.
