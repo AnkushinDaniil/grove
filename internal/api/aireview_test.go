@@ -144,6 +144,21 @@ func TestHandleAIReviewHappyPath(t *testing.T) {
 	}
 }
 
+func TestClaudeDraftArgsConstrainsClaude(t *testing.T) {
+	args := claudeDraftArgs("PROMPT TEXT", "sonnet")
+	// The prompt is an argument to -p (never interpolated into a shell).
+	if len(args) < 2 || args[0] != "-p" || args[1] != "PROMPT TEXT" {
+		t.Fatalf("prompt is not the -p argument: %v", args)
+	}
+	joined := strings.Join(args, " ")
+	// These flags keep claude from going agentic (the "signal: killed" fix).
+	for _, want := range []string{"--model sonnet", "--strict-mcp-config", "--max-turns 1", "--disallowedTools", "Bash", "Read"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("args missing %q: %v", want, args)
+		}
+	}
+}
+
 func TestHandleAIReviewValidation(t *testing.T) {
 	h := newPRHarness(t, &fakePRGH{})
 	cases := []map[string]any{

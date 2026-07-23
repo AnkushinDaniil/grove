@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -675,7 +676,8 @@ func defaultAIDrafter(ctx context.Context, dir, prompt string) (string, error) {
 	if m := os.Getenv("GROVE_AI_DRAFT_MODEL"); m != "" {
 		model = m
 	}
-	cmd := exec.CommandContext(ctx, "claude", "-p", prompt, "--model", model, "--output-format", "text") //nolint:gosec // G204: binary is the fixed literal "claude"; prompt and model are arguments, not the command
+	//nolint:gosec // G204: binary is the fixed literal "claude"; prompt and model are arguments, not the command.
+	cmd := exec.CommandContext(ctx, "claude", claudeDraftArgs(prompt, model)...)
 	cmd.Dir = dir
 	cmd.Env = scrubClaudePATH(os.Environ())
 
@@ -683,6 +685,11 @@ func defaultAIDrafter(ctx context.Context, dir, prompt string) (string, error) {
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
+		// A deadline hit surfaces from cmd.Run as "signal: killed" (CommandContext
+		// SIGKILLs the child); translate it to something actionable instead.
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return "", fmt.Errorf("claude timed out after %s — the diff may be too large to review in one pass", aiDraftTimeout)
+		}
 		msg := strings.TrimSpace(stderr.String())
 		if msg == "" {
 			return "", fmt.Errorf("claude -p: %w", err)
@@ -690,6 +697,28 @@ func defaultAIDrafter(ctx context.Context, dir, prompt string) (string, error) {
 		return "", fmt.Errorf("claude -p: %w: %s", err, msg)
 	}
 	return strings.TrimSpace(stdout.String()), nil
+}
+
+// claudeDraftArgs builds the argv for a headless drafting/review call. The
+// constraint flags are load-bearing: they keep claude answering directly from
+// the prompt. Without them an open-ended prompt -- ai-review's "review this
+// whole PR" especially -- sends claude agentic, loading the user's MCP servers
+// and exploring the repo with tools for minutes until the context deadline
+// SIGKILLs it (the "claude -p: signal: killed" the user hit). Everything claude
+// needs is already embedded in the prompt, so the call runs with no MCP servers
+// (--strict-mcp-config, and no --mcp-config), no tools (--disallowedTools), and
+// a single turn (--max-turns 1).
+func claudeDraftArgs(prompt, model string) []string {
+	return []string{
+		"-p", prompt,
+		"--model", model,
+		"--output-format", "text",
+		"--strict-mcp-config",
+		"--max-turns", "1",
+		// Denylist last so its variadic value greedily takes exactly these tools.
+		"--disallowedTools", "Bash", "Read", "Edit", "Write", "Glob", "Grep",
+		"WebFetch", "WebSearch", "Task", "NotebookEdit", "TodoWrite",
+	}
 }
 
 // scrubClaudePATH drops shim directories from the PATH entry of env so the real

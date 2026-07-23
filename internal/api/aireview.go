@@ -41,8 +41,9 @@ const (
 	// past the model's context window or the drafting timeout.
 	maxAIReviewDiffBytes = 60 * 1024
 	// maxAIReviewFindings caps how many findings one pass returns, so a model
-	// that over-produces cannot flood the review with low-signal noise.
-	maxAIReviewFindings = 40
+	// that over-produces cannot flood the review with low-signal noise (and so
+	// generation stays fast). A focused set beats an exhaustive one for review.
+	maxAIReviewFindings = 20
 	// maxAIFindingBodyBytes caps one finding's comment body.
 	maxAIFindingBodyBytes = 4000
 )
