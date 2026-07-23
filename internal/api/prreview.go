@@ -23,9 +23,12 @@ import (
 // text. It is the swappable seam behind POST /reviews/pr/ai-draft.
 type aiDraftFunc func(ctx context.Context, dir, prompt string) (string, error)
 
-// aiDraftTimeout bounds one headless claude drafting call. Generous headroom:
-// even a fast model over a sizable diff can take a minute-plus.
-const aiDraftTimeout = 240 * time.Second
+// aiDraftTimeout bounds one headless claude drafting call. It has to be
+// generous because the same drafter runs the ai-review pass, which reasons over
+// a whole PR: a real (even small) PR review measured ~3.5 min, so the bound sits
+// well above that to avoid truncating a legitimate pass. ai-draft itself
+// finishes in seconds, so it never approaches this ceiling.
+const aiDraftTimeout = 600 * time.Second
 
 // maxPromptDiffBytes caps how much diff text is embedded in an ai-draft prompt.
 // Kept modest on purpose: a review comment needs enough surrounding diff to be

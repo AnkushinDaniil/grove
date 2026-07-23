@@ -46,6 +46,12 @@ export function AiFindingsPanel({ dir, pr, onFocus }: AiFindingsPanelProps) {
       <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto px-3 pb-3">
         {error && <p className="rounded border border-status-failed/30 bg-status-failed/10 px-2 py-1.5 text-2xs break-words text-status-failed">{error}</p>}
 
+        {reviewing && (
+          <p className="px-1 py-2 text-2xs text-ink-faint">
+            Reading the whole diff and drafting findings — this usually takes a minute or two.
+          </p>
+        )}
+
         {findings.map((f) => (
           <AiFindingCard key={f.id} finding={f} dir={dir} pr={pr} onFocus={onFocus} />
         ))}
