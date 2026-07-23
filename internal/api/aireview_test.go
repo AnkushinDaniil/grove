@@ -151,11 +151,17 @@ func TestClaudeDraftArgsConstrainsClaude(t *testing.T) {
 		t.Fatalf("prompt is not the -p argument: %v", args)
 	}
 	joined := strings.Join(args, " ")
-	// These flags keep claude from going agentic (the "signal: killed" fix).
-	for _, want := range []string{"--model sonnet", "--strict-mcp-config", "--max-turns 1", "--disallowedTools", "Bash", "Read"} {
+	// These flags keep claude from going agentic (the "signal: killed" /
+	// "exit status 1" fixes): a focused system prompt, no MCP, no tools.
+	for _, want := range []string{"--model sonnet", "--system-prompt", "--strict-mcp-config", "--disallowedTools", "Bash", "Read"} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("args missing %q: %v", want, args)
 		}
+	}
+	// No --max-turns: capping turns made claude exit 1 when a real PR needed a
+	// second turn.
+	if strings.Contains(joined, "--max-turns") {
+		t.Errorf("args should not cap turns: %v", args)
 	}
 }
 

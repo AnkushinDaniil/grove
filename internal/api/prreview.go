@@ -699,22 +699,39 @@ func defaultAIDrafter(ctx context.Context, dir, prompt string) (string, error) {
 	return strings.TrimSpace(stdout.String()), nil
 }
 
-// claudeDraftArgs builds the argv for a headless drafting/review call. The
-// constraint flags are load-bearing: they keep claude answering directly from
-// the prompt. Without them an open-ended prompt -- ai-review's "review this
-// whole PR" especially -- sends claude agentic, loading the user's MCP servers
-// and exploring the repo with tools for minutes until the context deadline
-// SIGKILLs it (the "claude -p: signal: killed" the user hit). Everything claude
-// needs is already embedded in the prompt, so the call runs with no MCP servers
-// (--strict-mcp-config, and no --mcp-config), no tools (--disallowedTools), and
-// a single turn (--max-turns 1).
+// draftSystemPrompt replaces claude's default system prompt for headless
+// drafting/review calls. The default one, plus the user's global CLAUDE.md
+// (e.g. an orchestration layer that says "delegate to agents, report findings
+// via tools"), makes the model behave like an agent: it narrates ("Findings
+// reported above…") or tries to delegate instead of just printing the answer,
+// so the output isn't the JSON/text the endpoint parses. A focused system
+// prompt strips all that.
+const draftSystemPrompt = "You are a precise code-review assistant with no tools and no ability to delegate. " +
+	"Analyze only what the user provides and reply with exactly the output they request — raw, " +
+	"with no preamble, no narration, and no tool use."
+
+// claudeDraftArgs builds the argv for a headless drafting/review call. These
+// flags are load-bearing — they keep claude answering directly from the prompt
+// instead of going agentic, which is what killed ai-review before:
+//   - --system-prompt: a focused reviewer prompt (see draftSystemPrompt), so the
+//     user's CLAUDE.md can't turn the call into an agent that narrates or
+//     delegates instead of emitting the answer.
+//   - --strict-mcp-config (with no --mcp-config): load no MCP servers, so an
+//     open-ended prompt can't explore them for minutes until the deadline
+//     SIGKILLs the process ("claude -p: signal: killed").
+//   - --disallowedTools: no repo/web exploration.
+//
+// Notably there is NO --max-turns cap: capping at 1 turn made claude exit 1
+// (empty stderr) whenever the model needed a second turn on a real PR. With MCP
+// and tools already gone there is nothing to explore, so the turns it takes are
+// just reasoning, bounded by aiDraftTimeout.
 func claudeDraftArgs(prompt, model string) []string {
 	return []string{
 		"-p", prompt,
 		"--model", model,
 		"--output-format", "text",
+		"--system-prompt", draftSystemPrompt,
 		"--strict-mcp-config",
-		"--max-turns", "1",
 		// Denylist last so its variadic value greedily takes exactly these tools.
 		"--disallowedTools", "Bash", "Read", "Edit", "Write", "Glob", "Grep",
 		"WebFetch", "WebSearch", "Task", "NotebookEdit", "TodoWrite",
