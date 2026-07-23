@@ -1,12 +1,14 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"path/filepath"
 	"strings"
 
+	"github.com/AnkushinDaniil/grove/internal/crg"
 	"github.com/AnkushinDaniil/grove/internal/github"
 )
 
@@ -32,6 +34,10 @@ type aiReviewRequest struct {
 
 type aiReviewResponse struct {
 	Findings []AiFinding `json:"findings"`
+	// GraphStatus tells the UI whether the review was codebase-aware:
+	// "ready" (call-graph context injected), "building" (graph warming up, this
+	// pass was diff-only), or "off" (no code-review-graph available).
+	GraphStatus string `json:"graph_status"`
 }
 
 const (
@@ -88,11 +94,17 @@ func (h *Handlers) handleAIReview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Pre-inject structural codebase context (call graph, blast radius) so the
+	// constrained reviewer weighs impact without exploring the repo itself. The
+	// graph is queried, never read live; if it isn't ready the review proceeds
+	// diff-only and warms the graph in the background for next time.
+	codebaseContext, graphStatus := h.reviewCodebaseContext(r.Context(), req.Dir, detail)
+
 	drafter := h.aiDrafter
 	if drafter == nil {
 		drafter = defaultAIDrafter
 	}
-	text, err := drafter(r.Context(), req.Dir, buildAIReviewPrompt(detail))
+	text, err := drafter(r.Context(), req.Dir, buildAIReviewPrompt(detail, codebaseContext))
 	if err != nil {
 		h.writeGHError(w, fmt.Errorf("ai review: %w", err))
 		return
@@ -103,19 +115,46 @@ func (h *Handlers) handleAIReview(w http.ResponseWriter, r *http.Request) {
 		writeErrorStatus(w, h.logger, http.StatusBadGateway, "ai review returned unparseable output")
 		return
 	}
-	writeJSON(w, h.logger, http.StatusOK, aiReviewResponse{Findings: anchorFindings(findings, detail)})
+	writeJSON(w, h.logger, http.StatusOK, aiReviewResponse{
+		Findings:    anchorFindings(findings, detail),
+		GraphStatus: graphStatus,
+	})
+}
+
+// reviewCodebaseContext queries the code-review-graph for the blast radius of
+// the PR's changed files and returns a prompt block plus the graph status. It
+// is nil-safe: with no graph subsystem the review is simply diff-only ("off").
+func (h *Handlers) reviewCodebaseContext(ctx context.Context, dir string, detail github.PRReview) (string, string) {
+	if h.crg == nil {
+		return "", string(crg.StatusOff)
+	}
+	files := make([]string, 0, len(detail.Files))
+	for _, f := range detail.Files {
+		if f.Path != "" {
+			files = append(files, f.Path)
+		}
+	}
+	block, status := h.crg.ReviewContext(ctx, dir, files)
+	return block, string(status)
 }
 
 // buildAIReviewPrompt asks the model to review the whole PR diff and return a
 // JSON array of line-anchored findings. It is deliberately strict about the
 // output shape (JSON only) and about anchoring to lines that appear in the diff,
 // because parseFindings/anchorFindings drop anything that does not conform.
-func buildAIReviewPrompt(pr github.PRReview) string {
+func buildAIReviewPrompt(pr github.PRReview, codebaseContext string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "You are a senior engineer reviewing pull request #%d %q.\n", pr.Number, pr.Title)
 	b.WriteString("Review the diff below and report concrete, high-signal findings: correctness bugs, ")
 	b.WriteString("missed edge cases, security or performance problems, and worthwhile simplifications. ")
 	b.WriteString("Skip trivia and do not restate what the code does.\n\n")
+
+	// Structural context first (call graph / blast radius), so the model weighs
+	// the diff against who depends on it before reading the changes themselves.
+	if strings.TrimSpace(codebaseContext) != "" {
+		b.WriteString(codebaseContext)
+		b.WriteString("\n")
+	}
 
 	b.WriteString("The diff under review (unified format; each file starts with '--- <path>'):\n")
 	b.WriteString(capText(fullDiffForPrompt(pr), maxAIReviewDiffBytes))

@@ -226,7 +226,7 @@ LLM-assisted drafting, and batch submit — all via `gh` (no stored tokens).
 | `POST /reviews/pr/drafts` | `{dir, pr, path, line, side, body}` | `DraftComment` (201) |
 | `DELETE /reviews/pr/drafts/{id}` | — | 204 |
 | `POST /reviews/pr/ai-draft` | `{dir, pr, kind: comment\|reply, path?, line?, thread_id?, instruction?}` | `{text}` |
-| `POST /reviews/pr/ai-review` | `{dir, pr}` | `{findings: [AiFinding]}` |
+| `POST /reviews/pr/ai-review` | `{dir, pr}` | `{findings: [AiFinding], graph_status}` |
 | `POST /reviews/pr/submit` | `{dir, pr, event: APPROVE\|REQUEST_CHANGES\|COMMENT, body, draft_ids: []}` | `{url}` |
 | `POST /reviews/pr/reply` | `{dir, pr, thread_id, body, resolve}` | 204 |
 
@@ -263,7 +263,11 @@ target line's hunk or the thread's context) and returns editable suggested
 text — the human always reviews/edits before it becomes a draft or reply.
 `ai-review` runs one headless claude pass over the **whole** PR diff and returns
 structured, line-anchored `findings` (proposed comments, some carrying a code
-`suggestion`). Findings are validated to anchor to a real changed line (the
+`suggestion`). When a code-review-graph (`internal/crg`) graph exists for the
+repo, the blast radius of the PR's changed files (dependents + covering tests)
+is pre-injected into the prompt so the review is codebase-aware without reading
+the code live; `graph_status` reports `ready` | `building` (first pass warms the
+graph in the background, diff-only) | `off` (CLI not installed). Findings are validated to anchor to a real changed line (the
 model's hallucinated paths/lines are dropped) and never auto-post: the reviewer
 accepts each into the drafts batch (a non-empty `suggestion` is serialized into
 the draft body as a GitHub ```` ```suggestion ```` block, so `submit` posts it as

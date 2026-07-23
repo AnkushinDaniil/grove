@@ -6,8 +6,23 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/AnkushinDaniil/grove/internal/crg"
 	"github.com/AnkushinDaniil/grove/internal/github"
 )
+
+// fakeCRG is an injectable codebaseGraph for the review handler tests.
+type fakeCRG struct {
+	block    string
+	status   crg.Status
+	gotFiles []string
+	gotRepo  string
+}
+
+func (f *fakeCRG) ReviewContext(_ context.Context, repo string, files []string) (string, crg.Status) {
+	f.gotRepo = repo
+	f.gotFiles = files
+	return f.block, f.status
+}
 
 func TestParseFindings(t *testing.T) {
 	cases := []struct {
@@ -162,6 +177,53 @@ func TestClaudeDraftArgsConstrainsClaude(t *testing.T) {
 	// second turn.
 	if strings.Contains(joined, "--max-turns") {
 		t.Errorf("args should not cap turns: %v", args)
+	}
+}
+
+func TestHandleAIReviewInjectsCodebaseContext(t *testing.T) {
+	gh := &fakePRGH{detail: anchoredPR()}
+	h := newPRHarness(t, gh)
+	dir := t.TempDir()
+
+	fc := &fakeCRG{block: "Repository call-graph context:\nBlast radius: 3 dependents", status: crg.StatusReady}
+	h.h.crg = fc
+
+	var gotPrompt string
+	h.h.aiDrafter = func(_ context.Context, _ string, prompt string) (string, error) {
+		gotPrompt = prompt
+		return `[{"path":"a.go","line":1,"side":"RIGHT","severity":"issue","body":"x"}]`, nil
+	}
+
+	var resp aiReviewResponse
+	h.decode(h.do(http.MethodPost, "/api/v1/reviews/pr/ai-review", map[string]any{
+		"dir": dir, "pr": 3,
+	}), http.StatusOK, &resp)
+
+	if resp.GraphStatus != "ready" {
+		t.Errorf("graph_status = %q, want ready", resp.GraphStatus)
+	}
+	if !strings.Contains(gotPrompt, "Blast radius: 3 dependents") {
+		t.Errorf("prompt missing injected codebase context:\n%s", gotPrompt)
+	}
+	// The PR's changed file was passed to the graph query.
+	if len(fc.gotFiles) != 1 || fc.gotFiles[0] != "a.go" {
+		t.Errorf("graph queried with files %v, want [a.go]", fc.gotFiles)
+	}
+}
+
+func TestHandleAIReviewGraphOffWhenNoCRG(t *testing.T) {
+	gh := &fakePRGH{detail: anchoredPR()}
+	h := newPRHarness(t, gh) // no crg wired
+	dir := t.TempDir()
+	h.h.aiDrafter = func(context.Context, string, string) (string, error) {
+		return "[]", nil
+	}
+	var resp aiReviewResponse
+	h.decode(h.do(http.MethodPost, "/api/v1/reviews/pr/ai-review", map[string]any{
+		"dir": dir, "pr": 3,
+	}), http.StatusOK, &resp)
+	if resp.GraphStatus != "off" {
+		t.Errorf("graph_status = %q, want off with no CRG", resp.GraphStatus)
 	}
 }
 

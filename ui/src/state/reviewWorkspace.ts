@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { apiClient } from "./api";
-import type { AiFinding, DraftComment, PRReview } from "../gen/types";
+import type { AiFinding, DraftComment, GraphStatus, PRReview } from "../gen/types";
 
 /** An AI-review finding held client-side. Findings are never persisted, so a
  *  local id keys the list and drives dismiss; the AiFinding fields are the
@@ -21,6 +21,9 @@ interface ReviewWorkspaceState {
   /** True once a pass has completed for the current PR, so the panel can tell
    *  "clean, nothing found" from "not run yet". */
   aiReviewRan: boolean;
+  /** Whether the last pass was codebase-aware (call graph injected), null
+   *  before the first pass. */
+  aiGraphStatus: GraphStatus | null;
   loading: boolean;
   /** True once the load for the current (dir, pr) has settled (success or
    *  error) -- distinguishes "still loading" from "loaded, PR not found". */
@@ -33,7 +36,7 @@ interface ReviewWorkspaceState {
   setReview: (review: PRReview) => void;
   addDraftLocal: (draft: DraftComment) => void;
   removeDraftLocal: (id: string) => void;
-  setAiFindings: (findings: LocalFinding[]) => void;
+  setAiFindings: (findings: LocalFinding[], graphStatus: GraphStatus) => void;
   removeFinding: (id: string) => void;
   setAiReviewing: (v: boolean) => void;
   setAiReviewError: (message: string | null) => void;
@@ -49,6 +52,7 @@ const initial = {
   aiReviewing: false,
   aiReviewError: null as string | null,
   aiReviewRan: false,
+  aiGraphStatus: null as GraphStatus | null,
   loading: false,
   loaded: false,
   error: null as string | null,
@@ -63,7 +67,8 @@ export const useReviewWorkspaceStore = create<ReviewWorkspaceState>((set) => ({
   setReview: (review) => set({ review }),
   addDraftLocal: (draft) => set((s) => ({ drafts: [...s.drafts, draft] })),
   removeDraftLocal: (id) => set((s) => ({ drafts: s.drafts.filter((d) => d.id !== id) })),
-  setAiFindings: (findings) => set({ aiFindings: findings, aiReviewError: null, aiReviewRan: true }),
+  setAiFindings: (findings, graphStatus) =>
+    set({ aiFindings: findings, aiReviewError: null, aiReviewRan: true, aiGraphStatus: graphStatus }),
   removeFinding: (id) => set((s) => ({ aiFindings: s.aiFindings.filter((f) => f.id !== id) })),
   setAiReviewing: (v) => set({ aiReviewing: v }),
   setAiReviewError: (message) => set({ aiReviewError: message }),
@@ -87,8 +92,10 @@ export async function runAIReview(dir: string, pr: number): Promise<void> {
   store.setAiReviewing(true);
   store.setAiReviewError(null);
   try {
-    const { findings } = await apiClient.aiReview({ dir, pr });
-    useReviewWorkspaceStore.getState().setAiFindings(findings.map((f) => ({ ...f, id: nextFindingId() })));
+    const { findings, graph_status } = await apiClient.aiReview({ dir, pr });
+    useReviewWorkspaceStore
+      .getState()
+      .setAiFindings(findings.map((f) => ({ ...f, id: nextFindingId() })), graph_status);
   } catch (err) {
     useReviewWorkspaceStore.getState().setAiReviewError(err instanceof Error ? err.message : String(err));
   } finally {

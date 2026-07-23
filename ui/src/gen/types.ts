@@ -464,8 +464,14 @@ export interface AiReviewRequest {
   pr: number;
 }
 
+export type GraphStatus = "ready" | "building" | "off";
+
 export interface AiReviewResponse {
   findings: AiFinding[];
+  /** Whether the pass was codebase-aware: "ready" (call-graph context
+   *  injected), "building" (graph warming up; this pass was diff-only), or
+   *  "off" (no code-review-graph installed). */
+  graph_status: GraphStatus;
 }
 
 export type SubmitReviewEvent = "APPROVE" | "REQUEST_CHANGES" | "COMMENT";

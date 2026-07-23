@@ -14,6 +14,7 @@ import (
 	"os"
 
 	"github.com/AnkushinDaniil/grove/internal/core"
+	"github.com/AnkushinDaniil/grove/internal/crg"
 	"github.com/AnkushinDaniil/grove/internal/gitcli"
 	"github.com/AnkushinDaniil/grove/internal/github"
 	"github.com/AnkushinDaniil/grove/internal/session"
@@ -74,6 +75,19 @@ type Config struct {
 	// endpoint reporting an empty key, which the UI treats as "push
 	// unavailable".
 	PushPublicKey string
+
+	// CRG supplies structural codebase context (call graph, blast radius) for AI
+	// review, pre-injected into the prompt. Nil leaves review diff-only. Set to a
+	// *crg.Service on the daemon.
+	CRG codebaseGraph
+}
+
+// codebaseGraph provides a repo's structural review context and its graph
+// readiness. Implemented by *crg.Service; a nil value means review runs
+// diff-only (status "off"). Kept an interface so the review handler is testable
+// without the code-review-graph CLI.
+type codebaseGraph interface {
+	ReviewContext(ctx context.Context, repo string, files []string) (string, crg.Status)
 }
 
 // Orchestrator launches a node as a root orchestrator: a headless session with
@@ -102,6 +116,7 @@ type Handlers struct {
 	pushPublicKey string
 	github        GitHubClient
 	git           *gitcli.Runner
+	crg           codebaseGraph
 
 	// stats caches computed GET /stats payloads for statsCacheTTL, keyed by
 	// scope+range, so repeated dashboard polls do not re-aggregate the DB.
@@ -142,6 +157,7 @@ func New(cfg Config) *Handlers {
 		home:          home,
 		profilesDir:   cfg.ProfilesDir,
 		pushPublicKey: cfg.PushPublicKey,
+		crg:           cfg.CRG,
 		github:        gh,
 		git:           gitcli.NewRunner(),
 		stats:         newStatsCache(statsCacheTTL),

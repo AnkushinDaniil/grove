@@ -21,6 +21,7 @@ export function AiFindingsPanel({ dir, pr, onSelect }: AiFindingsPanelProps) {
   const reviewing = useReviewWorkspaceStore((s) => s.aiReviewing);
   const error = useReviewWorkspaceStore((s) => s.aiReviewError);
   const ran = useReviewWorkspaceStore((s) => s.aiReviewRan);
+  const graphStatus = useReviewWorkspaceStore((s) => s.aiGraphStatus);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col border-b border-border">
@@ -51,6 +52,16 @@ export function AiFindingsPanel({ dir, pr, onSelect }: AiFindingsPanelProps) {
           <p className="px-1 py-2 text-2xs text-ink-faint">
             Reading the whole diff and drafting findings — this usually takes a minute or two.
           </p>
+        )}
+
+        {!reviewing && graphStatus === "building" && (
+          <p className="rounded border border-border bg-surface-2/60 px-2 py-1.5 text-2xs text-ink-faint">
+            Building this repo's call graph in the background — this pass was diff-only. Re-run in a bit for
+            codebase-aware findings (blast radius, callers, tests).
+          </p>
+        )}
+        {!reviewing && ran && graphStatus === "ready" && (
+          <p className="px-1 text-2xs text-ink-faint">✓ Codebase-aware — weighed against the call graph.</p>
         )}
 
         {findings.map((f) => (

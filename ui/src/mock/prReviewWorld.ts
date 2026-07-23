@@ -149,7 +149,7 @@ class MockPRReviewWorld {
         suggestion: "",
       });
     }
-    return { findings };
+    return { findings, graph_status: "ready" };
   }
 
   submitReview(req: SubmitReviewRequest): SubmitReviewResponse {

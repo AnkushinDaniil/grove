@@ -14,6 +14,7 @@ import (
 
 	"github.com/AnkushinDaniil/grove/internal/api"
 	"github.com/AnkushinDaniil/grove/internal/config"
+	"github.com/AnkushinDaniil/grove/internal/crg"
 	"github.com/AnkushinDaniil/grove/internal/driver"
 	"github.com/AnkushinDaniil/grove/internal/driver/claude"
 	"github.com/AnkushinDaniil/grove/internal/driver/codex"
@@ -183,6 +184,16 @@ func buildServer(ctx context.Context, logger *slog.Logger, layout config.Layout,
 	}
 	pushDispatcher := push.New(push.Config{Store: st, Keys: pushKeys, Logger: logger})
 
+	// Codebase knowledge graph (code-review-graph): structural context for AI
+	// review, queried not read. Absent CLI degrades review to diff-only.
+	crgRunner := crg.New(filepath.Join(layout.Home, "graphs"), logger)
+	if crgRunner.Available() {
+		logger.Info("codebase graph enabled (code-review-graph)")
+	} else {
+		logger.Info("codebase graph disabled (code-review-graph not installed); AI review runs diff-only")
+	}
+	crgService := crg.NewService(crgRunner, logger)
+
 	apiHandlers := api.New(api.Config{
 		Tree:          tr,
 		Sessions:      mgr,
@@ -197,6 +208,7 @@ func buildServer(ctx context.Context, logger *slog.Logger, layout config.Layout,
 		Commit:        commit,
 		ProfilesDir:   layout.Profiles,
 		PushPublicKey: pushKeys.PublicKey(),
+		CRG:           crgService,
 	})
 	wsHandlers := ws.New(ws.Config{
 		Tree:          tr,
