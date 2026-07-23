@@ -18,15 +18,17 @@ interface AiFindingCardProps {
   finding: LocalFinding;
   dir: string;
   pr: number;
-  /** Scrolls the diff to this finding's file. */
-  onFocus: (path: string) => void;
+  /** When true the card is rendered inline in the diff at its anchor line, so
+   *  it omits the clickable path:line location (the surrounding diff already
+   *  shows where). */
+  inline?: boolean;
 }
 
-/** One AI-review proposal in the findings panel: severity, its diff location
- *  (click to jump), the comment, and an optional code suggestion. Accept turns
+/** One AI-review proposal, rendered inline in the diff at its exact anchor
+ *  line: severity, the comment, and an optional code suggestion. Accept turns
  *  it into a pending draft (the suggestion becoming a committable GitHub
  *  ```suggestion block); Dismiss drops it. Edit tweaks the text first. */
-export function AiFindingCard({ finding, dir, pr, onFocus }: AiFindingCardProps) {
+export function AiFindingCard({ finding, dir, pr, inline }: AiFindingCardProps) {
   const [editing, setEditing] = useState(false);
   const [body, setBody] = useState(finding.body);
   const [suggestion, setSuggestion] = useState(finding.suggestion);
@@ -67,14 +69,11 @@ export function AiFindingCard({ finding, dir, pr, onFocus }: AiFindingCardProps)
           <span className="h-1.5 w-1.5 rounded-full bg-current" />
           {sev.label}
         </span>
-        <button
-          type="button"
-          onClick={() => onFocus(finding.path)}
-          title={`Jump to ${finding.path}`}
-          className={clsx("min-w-0 truncate font-mono text-ink-faint hover:text-ink hover:underline", FOCUS_RING)}
-        >
-          {finding.path}:{finding.line}
-        </button>
+        {!inline && (
+          <span className="min-w-0 truncate font-mono text-ink-faint" title={finding.path}>
+            {finding.path}:{finding.line}
+          </span>
+        )}
       </div>
 
       {editing ? (

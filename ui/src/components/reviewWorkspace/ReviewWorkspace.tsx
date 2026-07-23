@@ -9,8 +9,15 @@ import { DraftPendingCard } from "./DraftPendingCard";
 import { CommentComposer } from "./CommentComposer";
 import { DraftsRail } from "./DraftsRail";
 import { AiFindingsPanel } from "./AiFindingsPanel";
+import { AiFindingCard } from "./AiFindingCard";
 import { SubmitBar } from "./SubmitBar";
+import type { LocalFinding } from "../../state/reviewWorkspace";
 import type { DiffViewComment, DiffViewComposerTarget } from "../diff/types";
+
+/** DOM id of a finding's inline card, used to jump to its exact line. */
+function findingDomId(id: string): string {
+  return `ai-finding:${id}`;
+}
 
 // @pierre/diffs + shiki are a meaningful chunk of the bundle (syntax
 // highlighting, worker pool) -- lazy-load so they only load once a diff
@@ -28,6 +35,7 @@ export function ReviewWorkspace() {
 
   const review = useReviewWorkspaceStore((s) => s.review);
   const drafts = useReviewWorkspaceStore((s) => s.drafts);
+  const aiFindings = useReviewWorkspaceStore((s) => s.aiFindings);
   const loading = useReviewWorkspaceStore((s) => s.loading);
   const loaded = useReviewWorkspaceStore((s) => s.loaded);
   const error = useReviewWorkspaceStore((s) => s.error);
@@ -82,21 +90,45 @@ export function ReviewWorkspace() {
       line: d.line,
       content: <DraftPendingCard key={d.id} draft={d} />,
     })),
+    // AI findings render inline at their exact anchor line -- the same
+    // annotation mechanism as threads/drafts, so a finding sits on the line it
+    // is about. The wrapper id lets the panel jump straight to it.
+    ...aiFindings.map((f) => ({
+      id: `aifinding:${f.id}`,
+      path: f.path,
+      side: f.side,
+      line: f.line,
+      content: (
+        <div key={f.id} id={findingDomId(f.id)}>
+          <AiFindingCard finding={f} dir={dir!} pr={pr} inline />
+        </div>
+      ),
+    })),
   ];
 
-  // Jump the diff to a finding's file. DiffView anchors each file section by
-  // the id fileDomId(viewedScopeKey, path); we reuse that convention rather
-  // than couple through a ref. The brief inline outline (not a Tailwind class,
-  // which the JIT might not have generated) confirms the landing spot.
-  function scrollToFile(path: string) {
-    const el = document.getElementById(`diff-file:pr:${dir}:${pr}:${path}`);
-    if (!el) return;
-    el.scrollIntoView({ behavior: "smooth", block: "start" });
+  // Jump the diff to a finding's inline card at its exact line (the anchored
+  // node above). Falls back to the file top when the card isn't in the DOM --
+  // e.g. its file is collapsed (marked viewed). The brief inline outline uses a
+  // style, not a Tailwind class the JIT might not have generated.
+  function highlight(el: HTMLElement) {
     el.style.transition = "box-shadow 0.15s ease";
     el.style.boxShadow = "inset 0 0 0 2px var(--color-accent)";
     window.setTimeout(() => {
       el.style.boxShadow = "";
     }, 1200);
+  }
+
+  function scrollToFinding(f: LocalFinding) {
+    const el = document.getElementById(findingDomId(f.id));
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      highlight(el);
+      return;
+    }
+    const fileEl = document.getElementById(`diff-file:pr:${dir}:${pr}:${f.path}`);
+    if (!fileEl) return;
+    fileEl.scrollIntoView({ behavior: "smooth", block: "start" });
+    highlight(fileEl);
   }
 
   function renderComposer(target: DiffViewComposerTarget) {
@@ -132,7 +164,7 @@ export function ReviewWorkspace() {
           </Suspense>
         </div>
         <aside className="flex max-h-[60vh] shrink-0 flex-col border-t border-border bg-surface lg:max-h-none lg:w-72 lg:border-t-0 lg:border-l">
-          <AiFindingsPanel dir={dir} pr={pr} onFocus={scrollToFile} />
+          <AiFindingsPanel dir={dir} pr={pr} onSelect={scrollToFinding} />
           <DraftsRail drafts={drafts} />
         </aside>
       </div>

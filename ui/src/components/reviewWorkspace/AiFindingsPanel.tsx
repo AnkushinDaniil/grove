@@ -1,21 +1,22 @@
 import clsx from "clsx";
 import { Loader2, Sparkles } from "lucide-react";
 import { runAIReview, useReviewWorkspaceStore } from "../../state/reviewWorkspace";
+import type { LocalFinding } from "../../state/reviewWorkspace";
 import { FOCUS_RING } from "../../lib/constants";
-import { AiFindingCard } from "./AiFindingCard";
+import { AiFindingRow } from "./AiFindingRow";
 
 interface AiFindingsPanelProps {
   dir: string;
   pr: number;
-  /** Scrolls the diff to a finding's file. */
-  onFocus: (path: string) => void;
+  /** Jumps the diff to a finding's inline card at its exact line. */
+  onSelect: (finding: LocalFinding) => void;
 }
 
 /** The AI-review side panel: a "Review with AI" pass over the whole PR diff
  *  produces line-anchored findings (proposed comments + suggestions) listed
  *  here. Each is accepted into the drafts batch or dismissed; clicking one
  *  jumps the diff to its file. Nothing posts without the reviewer. */
-export function AiFindingsPanel({ dir, pr, onFocus }: AiFindingsPanelProps) {
+export function AiFindingsPanel({ dir, pr, onSelect }: AiFindingsPanelProps) {
   const findings = useReviewWorkspaceStore((s) => s.aiFindings);
   const reviewing = useReviewWorkspaceStore((s) => s.aiReviewing);
   const error = useReviewWorkspaceStore((s) => s.aiReviewError);
@@ -53,7 +54,7 @@ export function AiFindingsPanel({ dir, pr, onFocus }: AiFindingsPanelProps) {
         )}
 
         {findings.map((f) => (
-          <AiFindingCard key={f.id} finding={f} dir={dir} pr={pr} onFocus={onFocus} />
+          <AiFindingRow key={f.id} finding={f} onSelect={onSelect} />
         ))}
 
         {!reviewing && findings.length === 0 && !error && (
