@@ -8,6 +8,8 @@ import type {
   DraftComment,
   PRReview,
   ReplyToThreadRequest,
+  ReviewChatRequest,
+  ReviewChatResponse,
   ReviewThread,
   SubmitReviewRequest,
   SubmitReviewResponse,
@@ -127,7 +129,7 @@ class MockPRReviewWorld {
         line: 1,
         side: "RIGHT",
         severity: "issue",
-        body: "This path can return before the added transaction is removed on the error branch — the pool leaks the entry.",
+        body: "This path can return before the added transaction is removed on the error branch - the pool leaks the entry.",
         suggestion: "",
       });
       findings.push({
@@ -150,6 +152,14 @@ class MockPRReviewWorld {
       });
     }
     return { findings, graph_status: "ready" };
+  }
+
+  async reviewChat(req: ReviewChatRequest): Promise<ReviewChatResponse> {
+    this.getReview(req.dir, req.pr);
+    await delay(400);
+    return {
+      reply: `Looking at it again: ${req.message.trim()} - the risk is on the error path, where the added transaction isn't removed before the early return, so the pool keeps a stale entry.`,
+    };
   }
 
   submitReview(req: SubmitReviewRequest): SubmitReviewResponse {

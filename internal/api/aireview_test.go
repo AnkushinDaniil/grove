@@ -134,7 +134,7 @@ func TestHandleAIReviewHappyPath(t *testing.T) {
 	dir := t.TempDir()
 
 	var gotPrompt string
-	h.h.aiDrafter = func(_ context.Context, _ string, prompt string) (string, error) {
+	h.h.aiSession = func(_ context.Context, _ string, prompt, _ string, _ bool) (string, error) {
 		gotPrompt = prompt
 		return `[
 			{"path":"a.go","line":1,"side":"RIGHT","severity":"issue","body":"real finding","suggestion":"new one fixed"},
@@ -189,7 +189,7 @@ func TestHandleAIReviewInjectsCodebaseContext(t *testing.T) {
 	h.h.crg = fc
 
 	var gotPrompt string
-	h.h.aiDrafter = func(_ context.Context, _ string, prompt string) (string, error) {
+	h.h.aiSession = func(_ context.Context, _ string, prompt, _ string, _ bool) (string, error) {
 		gotPrompt = prompt
 		return `[{"path":"a.go","line":1,"side":"RIGHT","severity":"issue","body":"x"}]`, nil
 	}
@@ -215,7 +215,7 @@ func TestHandleAIReviewGraphOffWhenNoCRG(t *testing.T) {
 	gh := &fakePRGH{detail: anchoredPR()}
 	h := newPRHarness(t, gh) // no crg wired
 	dir := t.TempDir()
-	h.h.aiDrafter = func(context.Context, string, string) (string, error) {
+	h.h.aiSession = func(context.Context, string, string, string, bool) (string, error) {
 		return "[]", nil
 	}
 	var resp aiReviewResponse
@@ -242,7 +242,7 @@ func TestHandleAIReviewUnparseable(t *testing.T) {
 	gh := &fakePRGH{detail: anchoredPR()}
 	h := newPRHarness(t, gh)
 	dir := t.TempDir()
-	h.h.aiDrafter = func(context.Context, string, string) (string, error) {
+	h.h.aiSession = func(context.Context, string, string, string, bool) (string, error) {
 		return "I refuse to output JSON.", nil
 	}
 	h.decode(h.do(http.MethodPost, "/api/v1/reviews/pr/ai-review", map[string]any{

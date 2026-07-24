@@ -227,6 +227,7 @@ LLM-assisted drafting, and batch submit — all via `gh` (no stored tokens).
 | `DELETE /reviews/pr/drafts/{id}` | — | 204 |
 | `POST /reviews/pr/ai-draft` | `{dir, pr, kind: comment\|reply, path?, line?, thread_id?, instruction?}` | `{text}` |
 | `POST /reviews/pr/ai-review` | `{dir, pr}` | `{findings: [AiFinding], graph_status}` |
+| `POST /reviews/pr/chat` | `{dir, pr, message}` | `{reply}` |
 | `POST /reviews/pr/submit` | `{dir, pr, event: APPROVE\|REQUEST_CHANGES\|COMMENT, body, draft_ids: []}` | `{url}` |
 | `POST /reviews/pr/reply` | `{dir, pr, thread_id, body, resolve}` | 204 |
 
@@ -267,7 +268,14 @@ structured, line-anchored `findings` (proposed comments, some carrying a code
 repo, the blast radius of the PR's changed files (dependents + covering tests)
 is pre-injected into the prompt so the review is codebase-aware without reading
 the code live; `graph_status` reports `ready` | `building` (first pass warms the
-graph in the background, diff-only) | `off` (CLI not installed). Findings are validated to anchor to a real changed line (the
+graph in the background, diff-only) | `off` (CLI not installed).
+
+The findings pass is turn 1 of a resumable claude session (`--session-id`), and
+its id is persisted in settings keyed by (dir, pr). `chat` resumes it
+(`--resume`) with the user's `message`, so the reviewer answers with the PR, the
+injected context, and its own findings still in view (e.g. a question about one
+finding). It survives daemon restarts (claude keeps the transcript on disk);
+`chat` returns 409 when no review has been run for that (dir, pr) yet. Findings are validated to anchor to a real changed line (the
 model's hallucinated paths/lines are dropped) and never auto-post: the reviewer
 accepts each into the drafts batch (a non-empty `suggestion` is serialized into
 the draft body as a GitHub ```` ```suggestion ```` block, so `submit` posts it as

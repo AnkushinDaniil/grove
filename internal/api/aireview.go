@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/google/uuid"
+
 	"github.com/AnkushinDaniil/grove/internal/crg"
 	"github.com/AnkushinDaniil/grove/internal/github"
 )
@@ -100,14 +102,23 @@ func (h *Handlers) handleAIReview(w http.ResponseWriter, r *http.Request) {
 	// diff-only and warms the graph in the background for next time.
 	codebaseContext, graphStatus := h.reviewCodebaseContext(r.Context(), req.Dir, detail)
 
-	drafter := h.aiDrafter
+	// The findings pass is turn 1 of a resumable session, so the reviewer can be
+	// chatted with afterwards (POST /reviews/pr/chat) with the PR, context, and
+	// its own findings still in view.
+	sessionID := uuid.Must(uuid.NewV7()).String()
+	drafter := h.aiSession
 	if drafter == nil {
-		drafter = defaultAIDrafter
+		drafter = defaultSessionDrafter
 	}
-	text, err := drafter(r.Context(), req.Dir, buildAIReviewPrompt(detail, codebaseContext, h.reviewGuidelines(req.Dir)))
+	text, err := drafter(r.Context(), req.Dir, buildAIReviewPrompt(detail, codebaseContext, h.reviewGuidelines(req.Dir)), sessionID, false)
 	if err != nil {
 		h.writeGHError(w, fmt.Errorf("ai review: %w", err))
 		return
+	}
+	// Persist the session id so chat can resume it (best-effort: a failure here
+	// only disables follow-up chat, never the review).
+	if serr := h.store.SetSetting(r.Context(), reviewSessionKey(req.Dir, req.PR), sessionID); serr != nil {
+		h.logger.Warn("persist review session", "err", serr)
 	}
 
 	findings, err := parseFindings(text)

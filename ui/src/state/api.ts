@@ -5,6 +5,8 @@ import type {
   AiDraftResponse,
   AiReviewRequest,
   AiReviewResponse,
+  ReviewChatRequest,
+  ReviewChatResponse,
   ArchiveResponse,
   CreateFeedbackRequest,
   CreateNodeRequest,
@@ -108,6 +110,10 @@ export interface ApiClient {
    *  line-anchored findings (proposed comments, some with a code suggestion).
    *  Nothing is posted; the reviewer accepts/dismisses each finding. */
   aiReview(req: AiReviewRequest): Promise<AiReviewResponse>;
+  /** Continues the review conversation by resuming the session the last
+   *  ai-review pass created, so the reviewer answers with the PR + findings in
+   *  context (e.g. a question about one finding). */
+  reviewChat(req: ReviewChatRequest): Promise<ReviewChatResponse>;
   /** Posts one batch review (event + body + the referenced drafts) and
    *  clears those drafts. */
   submitReview(req: SubmitReviewRequest): Promise<SubmitReviewResponse>;
@@ -293,6 +299,8 @@ export const realApiClient: ApiClient = {
   aiDraft: (req) => request("/reviews/pr/ai-draft", { method: "POST", body: JSON.stringify(req) }),
 
   aiReview: (req) => request("/reviews/pr/ai-review", { method: "POST", body: JSON.stringify(req) }),
+
+  reviewChat: (req) => request("/reviews/pr/chat", { method: "POST", body: JSON.stringify(req) }),
 
   submitReview: (req) => request("/reviews/pr/submit", { method: "POST", body: JSON.stringify(req) }),
 

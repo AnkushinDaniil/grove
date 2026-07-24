@@ -474,6 +474,16 @@ export interface AiReviewResponse {
   graph_status: GraphStatus;
 }
 
+export interface ReviewChatRequest {
+  dir: string;
+  pr: number;
+  message: string;
+}
+
+export interface ReviewChatResponse {
+  reply: string;
+}
+
 export type SubmitReviewEvent = "APPROVE" | "REQUEST_CHANGES" | "COMMENT";
 
 export interface SubmitReviewRequest {

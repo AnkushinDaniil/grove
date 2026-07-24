@@ -9,6 +9,13 @@ export interface LocalFinding extends AiFinding {
   id: string;
 }
 
+/** One turn in the review conversation (the resumable session the ai-review
+ *  pass created). */
+export interface ChatMessage {
+  role: "user" | "assistant";
+  text: string;
+}
+
 interface ReviewWorkspaceState {
   dir: string | null;
   pr: number | null;
@@ -24,6 +31,10 @@ interface ReviewWorkspaceState {
   /** Whether the last pass was codebase-aware (call graph injected), null
    *  before the first pass. */
   aiGraphStatus: GraphStatus | null;
+  /** The review conversation (chat with the session the pass created). */
+  chatMessages: ChatMessage[];
+  chatSending: boolean;
+  chatError: string | null;
   loading: boolean;
   /** True once the load for the current (dir, pr) has settled (success or
    *  error) -- distinguishes "still loading" from "loaded, PR not found". */
@@ -40,6 +51,9 @@ interface ReviewWorkspaceState {
   removeFinding: (id: string) => void;
   setAiReviewing: (v: boolean) => void;
   setAiReviewError: (message: string | null) => void;
+  pushChat: (message: ChatMessage) => void;
+  setChatSending: (v: boolean) => void;
+  setChatError: (message: string | null) => void;
   reset: () => void;
 }
 
@@ -53,6 +67,9 @@ const initial = {
   aiReviewError: null as string | null,
   aiReviewRan: false,
   aiGraphStatus: null as GraphStatus | null,
+  chatMessages: [] as ChatMessage[],
+  chatSending: false,
+  chatError: null as string | null,
   loading: false,
   loaded: false,
   error: null as string | null,
@@ -72,6 +89,9 @@ export const useReviewWorkspaceStore = create<ReviewWorkspaceState>((set) => ({
   removeFinding: (id) => set((s) => ({ aiFindings: s.aiFindings.filter((f) => f.id !== id) })),
   setAiReviewing: (v) => set({ aiReviewing: v }),
   setAiReviewError: (message) => set({ aiReviewError: message }),
+  pushChat: (message) => set((s) => ({ chatMessages: [...s.chatMessages, message] })),
+  setChatSending: (v) => set({ chatSending: v }),
+  setChatError: (message) => set({ chatError: message }),
 
   reset: () => set({ ...initial }),
 }));
@@ -100,6 +120,24 @@ export async function runAIReview(dir: string, pr: number): Promise<void> {
     useReviewWorkspaceStore.getState().setAiReviewError(err instanceof Error ? err.message : String(err));
   } finally {
     useReviewWorkspaceStore.getState().setAiReviewing(false);
+  }
+}
+
+/** Sends one chat turn to the review session and appends the reply. The user
+ *  message is shown immediately; a failure surfaces as chatError without losing
+ *  the transcript. */
+export async function sendReviewChat(dir: string, pr: number, message: string): Promise<void> {
+  const store = useReviewWorkspaceStore.getState();
+  store.pushChat({ role: "user", text: message });
+  store.setChatSending(true);
+  store.setChatError(null);
+  try {
+    const { reply } = await apiClient.reviewChat({ dir, pr, message });
+    useReviewWorkspaceStore.getState().pushChat({ role: "assistant", text: reply });
+  } catch (err) {
+    useReviewWorkspaceStore.getState().setChatError(err instanceof Error ? err.message : String(err));
+  } finally {
+    useReviewWorkspaceStore.getState().setChatSending(false);
   }
 }
 

@@ -131,6 +131,11 @@ type Handlers struct {
 	// /reviews/pr/ai-draft). A nil value falls back to the real claude exec
 	// (defaultAIDrafter); tests override it to avoid shelling out.
 	aiDrafter aiDraftFunc
+
+	// aiSession runs a session-bound claude turn for the ai-review pass and its
+	// follow-up chat (POST /reviews/pr/ai-review, /reviews/pr/chat). Nil falls
+	// back to defaultSessionDrafter; tests override it.
+	aiSession aiSessionFunc
 }
 
 // New builds Handlers from cfg.
@@ -211,6 +216,7 @@ func (h *Handlers) Routes() http.Handler {
 	mux.HandleFunc("DELETE /api/v1/reviews/pr/drafts/{id}", h.handleDeleteDraft)
 	mux.HandleFunc("POST /api/v1/reviews/pr/ai-draft", h.handleAIDraft)
 	mux.HandleFunc("POST /api/v1/reviews/pr/ai-review", h.handleAIReview)
+	mux.HandleFunc("POST /api/v1/reviews/pr/chat", h.handleReviewChat)
 	mux.HandleFunc("POST /api/v1/reviews/pr/submit", h.handleSubmitReview)
 	mux.HandleFunc("POST /api/v1/reviews/pr/reply", h.handleReplyThread)
 

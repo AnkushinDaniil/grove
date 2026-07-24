@@ -106,6 +106,24 @@ describe("ReviewWorkspace (mock mode)", () => {
     await waitFor(() => expect(dismissButtons()).toHaveLength(2));
   });
 
+  it("after a review, you can chat with the review session and get a reply", async () => {
+    renderWorkspace();
+    await screen.findByText("src/Nethermind/Nethermind.TxPool/TxPool.cs");
+
+    // Chat is gated on a review having run (there is a session to resume).
+    expect(screen.queryByLabelText("Ask the reviewer")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /review with ai/i }));
+    const input = await screen.findByLabelText("Ask the reviewer");
+
+    fireEvent.change(input, { target: { value: "why is the first finding a bug?" } });
+    fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
+
+    // The question shows immediately, then the resumed session's reply arrives.
+    expect(screen.getByText("why is the first finding a bug?")).toBeInTheDocument();
+    await screen.findByText(/the pool keeps a stale entry/i);
+  });
+
   it("Draft with AI fills the composer textarea with the mocked suggestion", async () => {
     renderWorkspace();
     await screen.findByText("src/Nethermind/Nethermind.TxPool/TxPool.cs");

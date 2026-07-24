@@ -4,6 +4,7 @@ import { runAIReview, useReviewWorkspaceStore } from "../../state/reviewWorkspac
 import type { LocalFinding } from "../../state/reviewWorkspace";
 import { FOCUS_RING } from "../../lib/constants";
 import { AiFindingRow } from "./AiFindingRow";
+import { ReviewChat } from "./ReviewChat";
 
 interface AiFindingsPanelProps {
   dir: string;
@@ -50,18 +51,18 @@ export function AiFindingsPanel({ dir, pr, onSelect }: AiFindingsPanelProps) {
 
         {reviewing && (
           <p className="px-1 py-2 text-2xs text-ink-faint">
-            Reading the whole diff and drafting findings — this usually takes a minute or two.
+            Reading the whole diff and drafting findings - this usually takes a minute or two.
           </p>
         )}
 
         {!reviewing && graphStatus === "building" && (
           <p className="rounded border border-border bg-surface-2/60 px-2 py-1.5 text-2xs text-ink-faint">
-            Building this repo's call graph in the background — this pass was diff-only. Re-run in a bit for
+            Building this repo's call graph in the background - this pass was diff-only. Re-run in a bit for
             codebase-aware findings (blast radius, callers, tests).
           </p>
         )}
         {!reviewing && ran && graphStatus === "ready" && (
-          <p className="px-1 text-2xs text-ink-faint">✓ Codebase-aware — weighed against the call graph.</p>
+          <p className="px-1 text-2xs text-ink-faint">Codebase-aware: weighed against the call graph.</p>
         )}
 
         {findings.map((f) => (
@@ -71,11 +72,13 @@ export function AiFindingsPanel({ dir, pr, onSelect }: AiFindingsPanelProps) {
         {!reviewing && findings.length === 0 && !error && (
           <p className="px-1 py-2 text-2xs text-ink-faint">
             {ran
-              ? "No findings — nothing worth flagging."
+              ? "No findings - nothing worth flagging."
               : "Run an AI pass for line-by-line comments and code suggestions over the whole diff."}
           </p>
         )}
       </div>
+
+      <ReviewChat dir={dir} pr={pr} />
     </div>
   );
 }

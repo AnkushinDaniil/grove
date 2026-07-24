@@ -282,6 +282,10 @@ export async function createMockApiClient(): Promise<ApiClient> {
       return prReviewWorld.aiReview(req);
     },
 
+    async reviewChat(req) {
+      return prReviewWorld.reviewChat(req);
+    },
+
     async submitReview(req) {
       return prReviewWorld.submitReview(req);
     },
