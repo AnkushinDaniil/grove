@@ -80,6 +80,10 @@ type Config struct {
 	// review, pre-injected into the prompt. Nil leaves review diff-only. Set to a
 	// *crg.Service on the daemon.
 	CRG codebaseGraph
+
+	// GroveHome is the daemon state root (layout.Home, ~/.grove by default). The
+	// global review guidelines file lives at <GroveHome>/review.md.
+	GroveHome string
 }
 
 // codebaseGraph provides a repo's structural review context and its graph
@@ -117,6 +121,7 @@ type Handlers struct {
 	github        GitHubClient
 	git           *gitcli.Runner
 	crg           codebaseGraph
+	groveHome     string
 
 	// stats caches computed GET /stats payloads for statsCacheTTL, keyed by
 	// scope+range, so repeated dashboard polls do not re-aggregate the DB.
@@ -158,6 +163,7 @@ func New(cfg Config) *Handlers {
 		profilesDir:   cfg.ProfilesDir,
 		pushPublicKey: cfg.PushPublicKey,
 		crg:           cfg.CRG,
+		groveHome:     cfg.GroveHome,
 		github:        gh,
 		git:           gitcli.NewRunner(),
 		stats:         newStatsCache(statsCacheTTL),

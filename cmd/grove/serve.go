@@ -184,6 +184,10 @@ func buildServer(ctx context.Context, logger *slog.Logger, layout config.Layout,
 	}
 	pushDispatcher := push.New(push.Config{Store: st, Keys: pushKeys, Logger: logger})
 
+	// Seed the review-guidelines template so "Review with AI" follows the user's
+	// style/rules (see internal/api.reviewGuidelines).
+	ensureReviewTemplate(layout.Home, logger)
+
 	// Codebase knowledge graph (code-review-graph): structural context for AI
 	// review, queried not read. Absent CLI degrades review to diff-only.
 	crgRunner := crg.New(filepath.Join(layout.Home, "graphs"), logger)
@@ -209,6 +213,7 @@ func buildServer(ctx context.Context, logger *slog.Logger, layout config.Layout,
 		ProfilesDir:   layout.Profiles,
 		PushPublicKey: pushKeys.PublicKey(),
 		CRG:           crgService,
+		GroveHome:     layout.Home,
 	})
 	wsHandlers := ws.New(ws.Config{
 		Tree:          tr,

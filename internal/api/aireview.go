@@ -104,7 +104,7 @@ func (h *Handlers) handleAIReview(w http.ResponseWriter, r *http.Request) {
 	if drafter == nil {
 		drafter = defaultAIDrafter
 	}
-	text, err := drafter(r.Context(), req.Dir, buildAIReviewPrompt(detail, codebaseContext))
+	text, err := drafter(r.Context(), req.Dir, buildAIReviewPrompt(detail, codebaseContext, h.reviewGuidelines(req.Dir)))
 	if err != nil {
 		h.writeGHError(w, fmt.Errorf("ai review: %w", err))
 		return
@@ -142,14 +142,22 @@ func (h *Handlers) reviewCodebaseContext(ctx context.Context, dir string, detail
 // JSON array of line-anchored findings. It is deliberately strict about the
 // output shape (JSON only) and about anchoring to lines that appear in the diff,
 // because parseFindings/anchorFindings drop anything that does not conform.
-func buildAIReviewPrompt(pr github.PRReview, codebaseContext string) string {
+func buildAIReviewPrompt(pr github.PRReview, codebaseContext, guidelines string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "You are a senior engineer reviewing pull request #%d %q.\n", pr.Number, pr.Title)
 	b.WriteString("Review the diff below and report concrete, high-signal findings: correctness bugs, ")
 	b.WriteString("missed edge cases, security or performance problems, and worthwhile simplifications. ")
 	b.WriteString("Skip trivia and do not restate what the code does.\n\n")
 
-	// Structural context first (call graph / blast radius), so the model weighs
+	// The reviewer's own guidelines override the defaults above (their house
+	// style, wording, and formatting rules, e.g. ASCII-only comments), so place
+	// them early and authoritatively.
+	if block := guidelinesBlock(guidelines); block != "" {
+		b.WriteString(block)
+		b.WriteString("\n")
+	}
+
+	// Structural context next (call graph / blast radius), so the model weighs
 	// the diff against who depends on it before reading the changes themselves.
 	if strings.TrimSpace(codebaseContext) != "" {
 		b.WriteString(codebaseContext)
