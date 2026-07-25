@@ -29,8 +29,9 @@ type Client struct {
 	run    RunnerFunc
 	logger *slog.Logger
 
-	mu    sync.Mutex
-	login string // cached gh login, resolved once per process on first success
+	mu        sync.Mutex
+	login     string            // cached gh login, resolved once per process on first success
+	repoNames map[string]string // cached dir -> owner/repo, stable for a daemon run
 }
 
 // Option configures a Client.
@@ -50,7 +51,7 @@ func WithLogger(logger *slog.Logger) Option {
 // New builds a Client. Without options it runs the real gh binary on PATH and
 // logs to slog.Default().
 func New(opts ...Option) *Client {
-	c := &Client{run: execRunner, logger: slog.Default()}
+	c := &Client{run: execRunner, logger: slog.Default(), repoNames: map[string]string{}}
 	for _, opt := range opts {
 		opt(c)
 	}
@@ -89,8 +90,23 @@ func (c *Client) Login(ctx context.Context) (string, error) {
 	return login, nil
 }
 
-// RepoName returns the "owner/repo" name of the repository rooted at dir.
+// RepoName returns the "owner/repo" name of the repository rooted at dir. The
+// result is cached per dir: it does not change over a daemon run, so every
+// review flow (PRDetail, submit, the radar poll) reuses one lookup instead of
+// spawning a fresh gh each time. That both speeds things up and shrinks the
+// window for a transient gh failure under load. Only successful lookups are
+// cached, so a genuine failure (e.g. gh not yet authenticated) can be retried.
 func (c *Client) RepoName(ctx context.Context, dir string) (string, error) {
+	c.mu.Lock()
+	cached, ok := c.repoNames[dir]
+	c.mu.Unlock()
+	if ok {
+		return cached, nil
+	}
+
+	// Deliberately not holding the lock across the gh call, so concurrent
+	// lookups for different dirs don't serialize (a rare duplicate lookup for
+	// the same dir is harmless).
 	out, err := c.call(ctx, dir, "repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner")
 	if err != nil {
 		return "", fmt.Errorf("gh repo view: %w", err)
@@ -99,6 +115,9 @@ func (c *Client) RepoName(ctx context.Context, dir string) (string, error) {
 	if name == "" {
 		return "", fmt.Errorf("gh repo view: empty nameWithOwner")
 	}
+	c.mu.Lock()
+	c.repoNames[dir] = name
+	c.mu.Unlock()
 	return name, nil
 }
 
@@ -112,12 +131,18 @@ func execRunner(ctx context.Context, dir string, args ...string) ([]byte, error)
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
-		return nil, &GHError{
-			Args:     args,
-			Dir:      dir,
-			ExitCode: exitCode(err),
-			Stderr:   strings.TrimSpace(stderr.String()),
+		// A dead context means gh was SIGKILLed because our context ended, not
+		// because gh itself failed (it exits -1 with empty stderr, which reads as
+		// a cryptic error). Surface why: a canceled request (the client/tab went
+		// away mid-call) versus a real timeout.
+		reason := strings.TrimSpace(stderr.String())
+		switch {
+		case errors.Is(ctx.Err(), context.Canceled):
+			reason = "canceled (the request ended before gh finished, e.g. the tab reloaded)"
+		case errors.Is(ctx.Err(), context.DeadlineExceeded):
+			reason = "timed out (gh was slow, possibly under machine load)"
 		}
+		return nil, &GHError{Args: args, Dir: dir, ExitCode: exitCode(err), Stderr: reason}
 	}
 	return stdout.Bytes(), nil
 }

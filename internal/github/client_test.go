@@ -112,6 +112,49 @@ func TestRepoName(t *testing.T) {
 	}
 }
 
+func TestRepoNameCachesPerDir(t *testing.T) {
+	rr := &recordingRunner{fn: func(context.Context, string, ...string) ([]byte, error) {
+		return []byte("owner/repo\n"), nil
+	}}
+	c := New(WithRunner(rr.run))
+
+	for i := range 3 {
+		if _, err := c.RepoName(context.Background(), "/repo"); err != nil {
+			t.Fatalf("RepoName call %d: %v", i, err)
+		}
+	}
+	if len(rr.calls) != 1 {
+		t.Errorf("gh invoked %d times for one dir, want 1 (cached)", len(rr.calls))
+	}
+
+	// A different dir is a separate, uncached lookup.
+	if _, err := c.RepoName(context.Background(), "/other"); err != nil {
+		t.Fatal(err)
+	}
+	if len(rr.calls) != 2 {
+		t.Errorf("gh invoked %d times across two dirs, want 2", len(rr.calls))
+	}
+}
+
+func TestRepoNameFailureIsNotCached(t *testing.T) {
+	calls := 0
+	c := New(WithRunner(func(context.Context, string, ...string) ([]byte, error) {
+		calls++
+		if calls == 1 {
+			return nil, &GHError{Args: []string{"repo", "view"}, ExitCode: 1, Stderr: "auth"}
+		}
+		return []byte("owner/repo\n"), nil
+	}))
+	if _, err := c.RepoName(context.Background(), "/repo"); err == nil {
+		t.Fatal("first RepoName should fail")
+	}
+	// A retry after a transient failure must actually re-run gh (nothing cached).
+	got, err := c.RepoName(context.Background(), "/repo")
+	if err != nil || got != "owner/repo" {
+		t.Fatalf("retry RepoName = %q, %v; want owner/repo", got, err)
+	}
+}
+
 func TestRepoNameError(t *testing.T) {
 	c := New(WithRunner(func(context.Context, string, ...string) ([]byte, error) {
 		return nil, &GHError{Args: []string{"repo", "view"}, ExitCode: 1, Stderr: "no repo"}
